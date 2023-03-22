@@ -1,0 +1,14 @@
+# Erlang stuff
+*.o
+*.beam
+*.plt
+ebin/*.beam
+ebin/*.app
+
+# Erlang package stuff
+.eunit
+deps
+erl_crash.dump
+.erlang.mk
+_rel
+*.d
