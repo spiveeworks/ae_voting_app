@@ -46,8 +46,11 @@ parse_req_body(Req0) ->
 
 from_json(Req0, State) ->
     Req1 = case parse_req_body(Req0) of
+        {ok, #{<<"count">> := Count}, Req} ->
+            counter:increase_counter(Count),
+            Req;
         {ok, Body, Req} ->
-            io:format("Success: ~p~n", [Body]),
+            io:format("Invalid data received: ~p~n", [Body]),
             Req;
         {error, Req} ->
             io:format("Failure.~n", []),
