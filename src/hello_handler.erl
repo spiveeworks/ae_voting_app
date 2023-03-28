@@ -13,7 +13,18 @@ init(Req0, State) ->
 
             <script>
                 async function buttonClicked() {
-                    json = await fetch(\"./api\");
+                    text.innerHTML = \"failed?\";
+                    json = await fetch(
+                        \"./api/increaseCounter\",
+                        {
+                            method: \"post\",
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({count: 1})
+                        }
+                    );
                     object = await json.json();
 
                     text = document.getElementById(\"text\");

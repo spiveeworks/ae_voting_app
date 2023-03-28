@@ -8,7 +8,7 @@ start(_Type, _Args) ->
     Dispatch = cowboy_router:compile([
         {'_', [
             {"/", hello_handler, []},
-            {"/api", restful, []}
+            {"/api/increaseCounter", restful, increase_counter}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,
