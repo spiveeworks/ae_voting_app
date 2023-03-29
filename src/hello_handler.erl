@@ -41,6 +41,7 @@ init(Req0, State) ->
                 }
 
                 window.onload = updateCounter;
+                setInterval(updateCounter, 1000);
             </script>
 
             <p id=\"text\">Loading...</p>
