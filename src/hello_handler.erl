@@ -12,8 +12,13 @@ init(Req0, State) ->
             <body>
 
             <script>
+                function updateText(count) {
+                    text = document.getElementById(\"text\");
+                    text.innerHTML = \"The button has been clicked \"
+                        + count + \" times.\";
+                }
+
                 async function buttonClicked() {
-                    text.innerHTML = \"failed?\";
                     json = await fetch(
                         \"./api/increaseCounter\",
                         {
@@ -26,13 +31,19 @@ init(Req0, State) ->
                         }
                     );
                     object = await json.json();
-
-                    text = document.getElementById(\"text\");
-                    text.innerHTML = object.value;
+                    updateText(object.value);
                 }
+
+                async function updateCounter() {
+                    json = await fetch(\"./api/increaseCounter\");
+                    object = await json.json();
+                    updateText(object.value);
+                }
+
+                window.onload = updateCounter;
             </script>
 
-            <p id=\"text\">text</p>
+            <p id=\"text\">Loading...</p>
             <button onclick=\"buttonClicked()\">Click</button>
 
             </body>

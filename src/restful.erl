@@ -12,7 +12,8 @@ allowed_methods(Req, State) ->
     {[<<"GET">>, <<"POST">>, <<"OPTIONS">>], Req, State}.
 
 encode_counter_as_body(Req0, _State) ->
-    Data = zj:binary_encode(#{value => <<"hello">>}),
+    Counter = counter:read_counter(),
+    Data = zj:binary_encode(#{value => Counter}),
     Req1 = cowboy_req:set_resp_body(Data, Req0),
     Req1.
 
