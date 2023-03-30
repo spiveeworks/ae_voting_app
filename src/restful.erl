@@ -3,7 +3,7 @@
 
 -export([init/2, allowed_methods/2]).
 -export([content_types_accepted/2, from_json/2]).
--export([content_types_provided/2, to_html/2, to_json/2]).
+-export([content_types_provided/2, to_json/2]).
 
 init(Req, State) ->
     {cowboy_rest, Req, State}.
@@ -11,11 +11,9 @@ init(Req, State) ->
 allowed_methods(Req, State) ->
     {[<<"GET">>, <<"POST">>, <<"OPTIONS">>], Req, State}.
 
-encode_counter_as_body(Req0, _State) ->
+encode_counter() ->
     Counter = counter:read_counter(),
-    Data = zj:binary_encode(#{value => Counter}),
-    Req1 = cowboy_req:set_resp_body(Data, Req0),
-    Req1.
+    zj:binary_encode(#{value => Counter}).
 
 content_types_accepted(Req, State) ->
     Accepted = [
@@ -57,7 +55,8 @@ from_json(Req0, State) ->
             io:format("Failure.~n", []),
             Req
     end,
-    Req2 = encode_counter_as_body(Req1, State),
+    Data = encode_counter(),
+    Req2 = cowboy_req:set_resp_body(Data, Req1),
     {true, Req2, State}.
 
 content_types_provided(Req, State) ->
@@ -67,18 +66,7 @@ content_types_provided(Req, State) ->
     ],
     {Provided, Req, State}.
 
-to_html(Req0, State) ->
-    Req1 = cowboy_req:reply(200,
-        #{<<"content-type">> => <<"text/html">>},
-         <<"<button type=\"button\">Click Me!</button>">>,
-        Req0),
-    {ok, Req1, State}.
-
-to_json(Req0, State) ->
-    Req1 = encode_counter_as_body(Req0, State),
-    Req2 = cowboy_req:reply(200,
-        #{<<"content-type">> => <<"application/json">>},
-        % body given by encode_counter_as_body
-        Req1),
-    {ok, Req2, State}.
+to_json(Req, State) ->
+    Data = encode_counter(),
+    {Data, Req, State}.
 
