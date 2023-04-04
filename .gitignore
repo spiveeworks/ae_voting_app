@@ -3,12 +3,6 @@
 *.beam
 *.plt
 ebin/*.beam
-ebin/*.app
 
-# Erlang package stuff
-.eunit
+# Dependencies
 deps
-erl_crash.dump
-.erlang.mk
-_rel
-*.d
