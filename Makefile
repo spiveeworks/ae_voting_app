@@ -10,14 +10,15 @@ testdeps:
 
 pulldeps: deps/cowlib deps/ranch deps/cowboy deps/zj
 
+git-clone = git -c "advice.detachedHead=false" clone
 deps/cowlib:
-	git clone https://github.com/ninenines/cowlib deps/cowlib
+	$(git-clone) https://github.com/ninenines/cowlib deps/cowlib --branch 2.12.1
 deps/ranch:
-	git clone https://github.com/ninenines/ranch deps/ranch
+	$(git-clone) https://github.com/ninenines/ranch deps/ranch --branch 2.1.0
 deps/cowboy:
-	git clone https://github.com/ninenines/cowboy deps/cowboy
+	$(git-clone) https://github.com/ninenines/cowboy deps/cowboy --branch 2.9.0
 deps/zj:
-	git clone https://gitlab.com/zxq9/zj deps/zj
+	$(git-clone) https://gitlab.com/zxq9/zj deps/zj --branch 1.1.0
 
 vpath %.erl deps/cowlib/src:deps/ranch/src:deps/cowboy/src:deps/zj/src:src
 
