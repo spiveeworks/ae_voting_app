@@ -11,7 +11,7 @@ init([]) ->
     Procs = [
         #{
             id => counter,
-            start => {counter, start_link, [4]}
+            start => {counter, start_link, [0]}
         }
     ],
     {ok, {{one_for_one, 1, 5}, Procs}}.
