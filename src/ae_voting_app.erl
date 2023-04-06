@@ -1,4 +1,4 @@
--module(cowboytest_app).
+-module(ae_voting_app).
 -behaviour(application).
 
 -export([start/2]).
@@ -15,7 +15,7 @@ start(_Type, _Args) ->
         [{port, 8080}],
         #{env => #{dispatch => Dispatch}}
     ),
-    cowboytest_sup:start_link().
+    ae_voting_app_sup:start_link().
 
 stop(_State) ->
     ok.

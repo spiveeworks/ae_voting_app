@@ -75,7 +75,7 @@ objects: behaviours $(patsubst src/%.erl,ebin/%.beam,$(wildcard src/*.erl))
 #                   again.
 
 run: all
-	erl -pa ebin -name cowboytest@localhost -eval "lists:foreach(fun(X)->application:start(X)end, [crypto, asn1, public_key, ssl, cowlib, ranch, cowboy, zj, cowboytest])."
+	erl -pa ebin -name ae_voting_app@localhost -eval "lists:foreach(fun(X)->application:start(X)end, [crypto, asn1, public_key, ssl, cowlib, ranch, cowboy, zj, ae_voting_app])."
 
 clean:
 	rm -rf ebin/*.beam

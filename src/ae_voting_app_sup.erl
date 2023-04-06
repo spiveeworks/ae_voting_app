@@ -1,4 +1,4 @@
--module(cowboytest_sup).
+-module(ae_voting_app_sup).
 -behaviour(supervisor).
 
 -export([start_link/0]).
