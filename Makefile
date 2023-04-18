@@ -1,11 +1,11 @@
-all: cowlib ranch cowboy zj objects
+all: cowlib ranch cowboy zj zx vanillae objects
 
 # It's hard to make a Makefile *not* do something when a file is missing, or
 # respond two different ways based on what goal it is working towards, so we
 # just fall back to manually checking in the shell, and exiting out from there.
 
 testdeps:
-	@if [ ! -d deps/cowlib ] || [ ! -d deps/ranch ] || [ ! -d deps/cowboy ] || [ ! -d deps/zj ]; \
+	@if [ ! -d deps/cowlib ] || [ ! -d deps/ranch ] || [ ! -d deps/cowboy ] || [ ! -d deps/zj ] || [ ! -d deps/zx ] || [ ! -d deps/vanillae ]; \
 	then \
 	  echo 'You must pull git dependencies with `make pulldeps` before you' \
 	    'can use `make all` or `make run`.'; \
@@ -17,7 +17,7 @@ testdeps:
 # directory exists, you are free to patch or modify stuff for testing, and this
 # makefile will just trust you.
 
-pulldeps: deps/cowlib deps/ranch deps/cowboy deps/zj
+pulldeps: deps/cowlib deps/ranch deps/cowboy deps/zj deps/zx deps/vanillae
 
 git-clone = git -c "advice.detachedHead=false" clone
 
@@ -29,6 +29,10 @@ deps/cowboy:
 	$(git-clone) https://github.com/ninenines/cowboy deps/cowboy --branch 2.9.0
 deps/zj:
 	$(git-clone) https://gitlab.com/zxq9/zj deps/zj --branch 1.1.0
+deps/zx:
+	$(git-clone) https://gitlab.com/zxq9/zx/ deps/zx
+deps/vanillae:
+	$(git-clone) https://github.com/aeternity/Vanillae.git deps/vanillae
 
 
 # Single rule for all beam files: find an erlang file with the same name, and
@@ -36,11 +40,11 @@ deps/zj:
 # then copy them all over to some other location, or do some
 # application/release bundling, but whatever.
 
-vpath %.erl deps/cowlib/src:deps/ranch/src:deps/cowboy/src:deps/zj/src:src
+vpath %.erl deps/cowlib/src:deps/ranch/src:deps/cowboy/src:deps/zj/src:deps/zx/zomp/lib/otpr/zx/0.12.7/src:deps/vanillae/bindings/erlang/src:src
 
 ebin/%.beam: %.erl | ebin
-	erlc -I deps -I deps/cowlib/include -o ebin -pa ebin -Werror $<
-
+	@echo Compiling $<
+	@export zx_include=. && erlc -I deps -I deps/cowlib/include -I deps/zx/zomp/lib/otpr/zx/0.12.7/include -o ebin -pa ebin -Werror $<
 
 # Applications. 'behaviours' is all of the files that need to be compiled
 # first, to suppress "behaviour undefined" warnings when compiling ranch,
@@ -58,6 +62,8 @@ cowlib: testdeps $(patsubst deps/cowlib/src/%.erl,ebin/%.beam,$(wildcard deps/co
 ranch: behaviours $(patsubst deps/ranch/src/%.erl,ebin/%.beam,$(wildcard deps/ranch/src/*.erl))
 cowboy: behaviours $(patsubst deps/cowboy/src/%.erl,ebin/%.beam,$(wildcard deps/cowboy/src/*.erl))
 zj: testdeps $(patsubst deps/zj/src/%.erl,ebin/%.beam,$(wildcard deps/zj/src/*.erl))
+zx: testdeps ebin/zx_net.beam
+vanillae: testdeps $(patsubst deps/vanillae/bindings/erlang/src/%.erl,ebin/%.beam,$(wildcard deps/vanillae/bindings/erlang/src/*.erl))
 objects: behaviours $(patsubst src/%.erl,ebin/%.beam,$(wildcard src/*.erl))
 
 
@@ -75,7 +81,8 @@ objects: behaviours $(patsubst src/%.erl,ebin/%.beam,$(wildcard src/*.erl))
 #                   again.
 
 run: all
-	erl -pa ebin -name ae_voting_app@localhost -eval "lists:foreach(fun(X)->application:start(X)end, [crypto, asn1, public_key, ssl, cowlib, ranch, cowboy, zj, ae_voting_app])."
+	@echo Running...
+	@erl -pa ebin -name ae_voting_app@localhost -eval "lists:foreach(fun(X)->application:start(X)end, [crypto, asn1, public_key, ssl, cowlib, ranch, cowboy, zj, ae_voting_app])."
 
 clean:
 	rm -rf ebin/*.beam
@@ -84,4 +91,4 @@ distclean:
 	rm -rf deps
 
 # More than twice as many phony targets as actual targets, lol.
-.PHONY: all testdeps pulldeps behaviours cowlib ranch cowboy objects run distclean clean
+.PHONY: all testdeps pulldeps behaviours cowlib ranch cowboy zj zx vanillae objects run distclean clean
