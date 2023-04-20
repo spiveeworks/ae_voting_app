@@ -17,6 +17,7 @@ start(_Type, _Args) ->
     ),
     {ok, Sup} = ae_voting_app_sup:start_link(),
     vanillae_man:ae_nodes(seed_nodes()),
+    fetch_polls(),
     {ok, Sup}.
 
 % These are the seeds that new aeternity nodes connect to first.
@@ -35,6 +36,18 @@ seed_nodes() ->
      {"13.53.213.137",3013},
      {"13.53.78.163",3013}
     ].
+
+fetch_polls() ->
+    {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
+    io:format("AACI:~n~p~n", [AACI]),
+
+    CallerID = "ak_2SG9SK3ZLtKvxuNfeQms8BMPR2sHPFYJgLz997CB5bnYQK7Kmx",
+    ContractID = "ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq",
+    case vanillae:contract_call(CallerID, AACI, ContractID, "polls", []) of
+        {error, _} -> io:format("Contract call failed to build.~n");
+        TX -> io:format("Contract transaction:~n~p~n", [TX])
+    end,
+    ok.
 
 stop(_State) ->
     ok.

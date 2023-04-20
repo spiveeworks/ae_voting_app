@@ -1,0 +1,10 @@
+aesophia needs access to the sophia standard library in order to compile code.
+It has its own way of fetching the standard library as part of its build
+process, and then has this weird function
+`filename:join([code:priv_dir(aesophia), "stdlib"])`
+for finding the location of that standard library... but this location is
+itself a symlink. In one sense this is a versatile setup with multiple points
+of dynamism, but in another sense it is a multitude of dumb hacks stacked on
+top of each other. I don't want to call into aesophia's rebar build process, so
+I will just store these files straight in this repo, without a symlink, and
+mimick the directory pattern that `code:priv_dir` is looking for.
