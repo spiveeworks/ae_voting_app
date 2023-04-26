@@ -3,6 +3,7 @@
 *.beam
 *.plt
 ebin/*.beam
+priv/*.so
 
 # Dependencies
 deps

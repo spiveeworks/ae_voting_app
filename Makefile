@@ -1,6 +1,6 @@
 # Simple deps are ones whose source directory is in deps/<name>/src
 # ...the rest were made by Craig :-)
-SIMPLE_DEPS := cowlib ranch cowboy zj aebytecode base58 aeserialization eblake2 aesophia
+SIMPLE_DEPS := cowlib ranch cowboy zj aebytecode base58 enacl aeserialization eblake2 aesophia
 DEPS := $(SIMPLE_DEPS) zx vanillae
 DEPDIRS := $(patsubst %,deps/%,$(DEPS))
 
@@ -44,6 +44,8 @@ deps/aebytecode:
 	$(git-clone) https://github.com/aeternity/aebytecode.git deps/aebytecode --branch v3.2.0
 deps/base58:
 	$(git-clone) https://github.com/aeternity/erl-base58 deps/base58
+deps/enacl:
+	$(git-clone) https://github.com/aeternity/enacl.git deps/enacl
 deps/aeserialization:
 	$(git-clone) https://github.com/aeternity/aeserialization.git deps/aeserialization --branch v1.0.0
 deps/eblake2:
@@ -73,6 +75,12 @@ $(AEB_GENERATED_SRC): ebin/aeb_fate_generate_ops.beam deps/aebytecode/src/aeb_fa
 	@echo Generating code.
 	@cd deps/aebytecode && erl -pa ../../ebin/ -noshell -s aeb_fate_generate_ops gen_and_halt src/ include/
 
+priv:
+	mkdir priv
+
+priv/enacl_nif.so: deps/enacl/c_src/*.c | priv
+	gcc -fPIC -shared -lsodium -I /usr/lib/erlang/erts-13.1.3/include deps/enacl/c_src/*.c -o priv/enacl_nif.so
+
 # Applications. 'behaviours' is all of the files that need to be compiled
 # first, to suppress "behaviour undefined" warnings when compiling ranch,
 # cowboy, or user code. After that each target is just a patsubst to find all
@@ -93,6 +101,7 @@ cowboy: behaviours $(patsubst deps/cowboy/src/%.erl,ebin/%.beam,$(wildcard deps/
 zj: testdeps $(patsubst deps/zj/src/%.erl,ebin/%.beam,$(wildcard deps/zj/src/*.erl))
 aebytecode: testdeps $(patsubst deps/aebytecode/src/%.erl,ebin/%.beam,$(wildcard deps/aebytecode/src/*.erl)) ebin/aeb_fate_opcodes.beam ebin/aeb_fate_ops.beam ebin/aeb_fate_pp.beam
 base58: testdeps $(patsubst deps/base58/src/%.erl,ebin/%.beam,$(wildcard deps/base58/src/*.erl))
+enacl: testdeps $(patsubst deps/enacl/src/%.erl,ebin/%.beam,$(wildcard deps/enacl/src/*.erl)) priv/enacl_nif.so
 aeserialization: testdeps $(patsubst deps/aeserialization/src/%.erl,ebin/%.beam,$(wildcard deps/aeserialization/src/*.erl))
 eblake2: testdeps $(patsubst deps/eblake2/src/%.erl,ebin/%.beam,$(wildcard deps/eblake2/src/*.erl))
 aesophia: testdeps $(patsubst deps/aesophia/src/%.erl,ebin/%.beam,$(wildcard deps/aesophia/src/*.erl))
@@ -121,6 +130,7 @@ run: all
 clean:
 	rm -rf ebin/*.beam
 	rm -f $(AEB_GENERATED_SRC)
+	rm -r priv
 distclean:
 	rm -rf ebin/*.beam
 	rm -rf deps
