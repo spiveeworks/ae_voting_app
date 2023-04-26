@@ -1,6 +1,6 @@
 # Simple deps are ones whose source directory is in deps/<name>/src
 # ...the rest were made by Craig :-)
-SIMPLE_DEPS := cowlib ranch cowboy zj aebytecode aeserialization eblake2 aesophia
+SIMPLE_DEPS := cowlib ranch cowboy zj aebytecode base58 aeserialization eblake2 aesophia
 DEPS := $(SIMPLE_DEPS) zx vanillae
 DEPDIRS := $(patsubst %,deps/%,$(DEPS))
 
@@ -42,6 +42,8 @@ deps/zj:
 	$(git-clone) https://gitlab.com/zxq9/zj deps/zj --branch 1.1.0
 deps/aebytecode:
 	$(git-clone) https://github.com/aeternity/aebytecode.git deps/aebytecode --branch v3.2.0
+deps/base58:
+	$(git-clone) https://github.com/aeternity/erl-base58 deps/base58
 deps/aeserialization:
 	$(git-clone) https://github.com/aeternity/aeserialization.git deps/aeserialization --branch v1.0.0
 deps/eblake2:
@@ -90,6 +92,7 @@ ranch: behaviours $(patsubst deps/ranch/src/%.erl,ebin/%.beam,$(wildcard deps/ra
 cowboy: behaviours $(patsubst deps/cowboy/src/%.erl,ebin/%.beam,$(wildcard deps/cowboy/src/*.erl))
 zj: testdeps $(patsubst deps/zj/src/%.erl,ebin/%.beam,$(wildcard deps/zj/src/*.erl))
 aebytecode: testdeps $(patsubst deps/aebytecode/src/%.erl,ebin/%.beam,$(wildcard deps/aebytecode/src/*.erl)) ebin/aeb_fate_opcodes.beam ebin/aeb_fate_ops.beam ebin/aeb_fate_pp.beam
+base58: testdeps $(patsubst deps/base58/src/%.erl,ebin/%.beam,$(wildcard deps/base58/src/*.erl))
 aeserialization: testdeps $(patsubst deps/aeserialization/src/%.erl,ebin/%.beam,$(wildcard deps/aeserialization/src/*.erl))
 eblake2: testdeps $(patsubst deps/eblake2/src/%.erl,ebin/%.beam,$(wildcard deps/eblake2/src/*.erl))
 aesophia: testdeps $(patsubst deps/aesophia/src/%.erl,ebin/%.beam,$(wildcard deps/aesophia/src/*.erl))
