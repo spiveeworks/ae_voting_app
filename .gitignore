@@ -7,3 +7,6 @@ priv/*.so
 
 # Dependencies
 deps
+
+# Admin Stuff
+keypair

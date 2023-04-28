@@ -4,12 +4,48 @@
 -export([start/2]).
 -export([stop/1]).
 
+-export([make_keypair/0, store_keypair/2, load_keypair/1]).
+
 -export([create_poll_registry/0]).
 
--record(ak, {public :: string()}).
+-compile([export_all]).
+
+-record(keypair, {public :: string(), private :: binary()}).
+
+make_keypair() ->
+    #{ public := Pub, secret := Priv } = enacl:sign_keypair(),
+    PubBin = aeser_api_encoder:encode(account_pubkey, Pub),
+    PubStr = unicode:characters_to_list(PubBin),
+    #keypair{public = PubStr, private = Priv}.
+
+store_keypair(Path, KeyPair) ->
+    Data = io_lib:format("~p.~n", [KeyPair]),
+    ok = file:write_file(Path, Data).
+
+load_keypair(Path) ->
+    {ok, [Data]} = file:consult(Path),
+    Data.
+
+% returns the signature by itself
+make_transaction_signature(Priv, TX) ->
+    Id = list_to_binary(vanillae:network_id()),
+    Blob = <<Id/binary, TX/binary>>,
+    enacl:sign_detached(Blob, Priv).
+
+% serializes a transaction along with its signature
+sign_transaction(Priv, TX) ->
+    Sig = make_transaction_signature(Priv, TX),
+    SignedTXTemplate = [{signatures, [binary]}, {transaction, binary}],
+    Fields = [{signatures, [Sig]}, {transaction, TX}],
+    aeser_chain_objects:serialize(signed_tx, 1, SignedTXTemplate, Fields).
+
+sign_transaction_base58(Priv, EncodedTX) ->
+    {transaction, TX} = aeser_api_encoder:decode(EncodedTX),
+    SignedTX = sign_transaction(Priv, TX),
+    aeser_api_encoder:encode(transaction, SignedTX).
 
 get_key() ->
-    #ak{public = "ak_2SG9SK3ZLtKvxuNfeQms8BMPR2sHPFYJgLz997CB5bnYQK7Kmx"}.
+    load_keypair("keypair").
 
 start(_Type, _Args) ->
     Dispatch = cowboy_router:compile([
@@ -23,22 +59,29 @@ start(_Type, _Args) ->
         #{env => #{dispatch => Dispatch}}
     ),
     {ok, Sup} = ae_voting_app_sup:start_link(),
-    vanillae_man:ae_nodes([{"localhost",3013}]),
+    vanillae:ae_nodes([{"localhost",3013}]),
+    vanillae:network_id("ae_uat"),
     create_poll_registry(),
     %fetch_polls(),
     {ok, Sup}.
 
+% TODO: Make this run asynchronously, and poll for when the contract is
+% created?
 create_poll_registry() ->
     Key = get_key(),
-    CreatorID = Key#ak.public,
+    CreatorID = Key#keypair.public,
+    io:format("Account: ~s~n", [CreatorID]),
     Path = "contracts/Registry_Compiler_v6.aes",
 
     {ok, CreateTX} = vanillae:contract_create(CreatorID, Path, []),
     io:format("~nCreate TX:~n~p~n", [CreateTX]),
 
-    {ok, Result} = vanillae:dry_run(CreateTX),
-    #{"results" := [#{"call_obj" := #{"contract_id" := ContractID}}]} = Result,
-    io:format("~nDry run contract id: ~s~n", [ContractID]),
+    SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
+    io:format("~nSigned transaction: ~n~p~n", [SignedTX]),
+
+    {ok, Result} = vanillae:post_tx(SignedTX),
+    #{"tx_hash" := Hash} = Result,
+    io:format("~nTransaction hash: ~n~s~n", [Hash]),
 
     ok.
 
@@ -47,8 +90,8 @@ fetch_polls() ->
     io:format("~nAACI:~n~p~n", [AACI]),
 
     Key = get_key(),
-    CallerID = Key#ak.public,
-    ContractID = "ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq",
+    CallerID = Key#keypair.public,
+    ContractID = "ct_NNTKcrryzc6VNpuKZpvztCGo4Uha4614y5iUih1A12iJfAS7S",
     {ok, TX} = vanillae:contract_call(CallerID, AACI, ContractID, "polls", []),
     io:format("~nContract transaction:~n~p~n", [TX]),
     Result = vanillae:dry_run(TX),
