@@ -47,6 +47,17 @@ sign_transaction_base58(Priv, EncodedTX) ->
 get_key() ->
     load_keypair("keypair").
 
+dry_run(TX) ->
+    case vanillae:dry_run(TX) of
+        {ok, #{"results" := [#{"call_obj" := Obj}]}} ->
+            #{"return_value" := EncodedStr} = Obj,
+            Encoded = unicode:characters_to_binary(EncodedStr),
+            {contract_bytearray, Binary} = aeser_api_encoder:decode(Encoded),
+            Object = aeb_fate_encoding:deserialize(Binary),
+            {ok, Object};
+        _ -> error
+    end.
+
 start(_Type, _Args) ->
     Dispatch = cowboy_router:compile([
         {'_', [
@@ -61,8 +72,9 @@ start(_Type, _Args) ->
     {ok, Sup} = ae_voting_app_sup:start_link(),
     vanillae:ae_nodes([{"localhost",3013}]),
     vanillae:network_id("ae_uat"),
-    create_poll_registry(),
-    %fetch_polls(),
+    %create_poll_registry(),
+    Polls = fetch_polls(),
+    io:format("Polls: ~p~n", [Polls]),
     {ok, Sup}.
 
 % TODO: Make this run asynchronously, and poll for when the contract is
@@ -87,16 +99,14 @@ create_poll_registry() ->
 
 fetch_polls() ->
     {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
-    io:format("~nAACI:~n~p~n", [AACI]),
 
     Key = get_key(),
     CallerID = Key#keypair.public,
     ContractID = "ct_NNTKcrryzc6VNpuKZpvztCGo4Uha4614y5iUih1A12iJfAS7S",
     {ok, TX} = vanillae:contract_call(CallerID, AACI, ContractID, "polls", []),
-    io:format("~nContract transaction:~n~p~n", [TX]),
-    Result = vanillae:dry_run(TX),
-    io:format("~nDry run result:~n~p~n", [Result]),
-    ok.
+
+    {ok, Result} = dry_run(TX),
+    Result.
 
 stop(_State) ->
     ok.
