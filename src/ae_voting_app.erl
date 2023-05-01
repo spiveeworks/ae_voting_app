@@ -81,6 +81,7 @@ start(_Type, _Args) ->
     %create_poll_registry(),
     Polls = fetch_polls(),
     io:format("Polls: ~p~n", [Polls]),
+    create_poll(),
     {ok, Sup}.
 
 % TODO: Make this run asynchronously, and poll for when the contract is
@@ -113,6 +114,36 @@ fetch_polls() ->
 
     {ok, Result} = dry_run(TX),
     Result.
+
+option_none() ->
+    {variant, [0, 1], 0, {}}.
+
+option_some(A) ->
+    {variant, [0, 1], 1, {A}}.
+
+create_poll() ->
+    Key = get_key(),
+    ID = Key#keypair.public,
+    PollPath = "contracts/Poll_Iris.aes",
+
+    PollMetadata = {tuple, {<<"Test Poll">>,
+                            <<"Dummy poll for testing the poll contract.">>,
+                            <<"example.com">>,
+                            option_none()}},
+    Options = #{1 => <<"option 1">>, 2 => <<"option 2">>},
+    {ok, TopHeight} = vanillae:top_height(),
+    CloseHeight = TopHeight + 100,
+    PollArgs = [PollMetadata, Options, option_some(CloseHeight)],
+
+    {ok, CreateTX} = vanillae:contract_create(ID, PollPath, PollArgs),
+
+    SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
+
+    {ok, Result} = vanillae:post_tx(SignedTX),
+    #{"tx_hash" := Hash} = Result,
+    io:format("~nTransaction hash: ~n~s~n", [Hash]),
+
+    ok.
 
 stop(_State) ->
     ok.
