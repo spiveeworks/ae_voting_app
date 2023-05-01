@@ -125,7 +125,7 @@ objects: behaviours $(patsubst src/%.erl,ebin/%.beam,$(wildcard src/*.erl))
 
 run: all
 	@echo Running...
-	@export ERL_LIBS=sophia_stdlib && erl -pa ebin -name ae_voting_app@localhost -eval "lists:foreach(fun(X)->application:start(X)end, [crypto, asn1, public_key, ssl, cowlib, ranch, cowboy, zj, ae_voting_app])."
+	@export ERL_LIBS=sophia_stdlib && erl -pa ebin -name ae_voting_app@localhost -run ae_voting_app
 
 clean:
 	rm -rf ebin/*.beam

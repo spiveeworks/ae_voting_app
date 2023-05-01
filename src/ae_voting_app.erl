@@ -1,7 +1,7 @@
 -module(ae_voting_app).
 -behaviour(application).
 
--export([start/2]).
+-export([start/0, start/2]).
 -export([stop/1]).
 
 -export([make_keypair/0, store_keypair/2, load_keypair/1]).
@@ -58,6 +58,9 @@ dry_run(TX) ->
         _ -> error
     end.
 
+start() ->
+    application:ensure_all_started(?MODULE).
+
 start(_Type, _Args) ->
     Dispatch = cowboy_router:compile([
         {'_', [
@@ -69,9 +72,12 @@ start(_Type, _Args) ->
         [{port, 8080}],
         #{env => #{dispatch => Dispatch}}
     ),
-    {ok, Sup} = ae_voting_app_sup:start_link(),
+
     vanillae:ae_nodes([{"localhost",3013}]),
     vanillae:network_id("ae_uat"),
+
+    {ok, Sup} = ae_voting_app_sup:start_link(),
+
     %create_poll_registry(),
     Polls = fetch_polls(),
     io:format("Polls: ~p~n", [Polls]),

@@ -16,10 +16,6 @@ init([]) ->
         #{
             id => poll_keeper,
             start => {poll_keeper, start_link, []}
-        },
-        #{
-            id => vanillae_man,
-            start => {vanillae_man, start_link, []}
         }
     ],
     {ok, {{one_for_one, 1, 5}, Procs}}.
