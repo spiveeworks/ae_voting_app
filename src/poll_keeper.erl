@@ -52,6 +52,7 @@ get_poll_options(Id) ->
 %%
 
 init(empty) ->
+    spawn(tests, run_tests, []),
     {ok, #pks{}}.
 
 handle_call(get_polls, _, State) ->
