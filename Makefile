@@ -54,8 +54,11 @@ deps/aesophia:
 	$(git-clone) https://github.com/aeternity/aesophia.git deps/aesophia --branch v7.1.0
 deps/zx:
 	$(git-clone) https://gitlab.com/zxq9/zx/ deps/zx
+# Using spiveeworks fork of Vanillae, which is made specifically to add the
+# features this project needs. The aeternity fork should get those changes
+# eventually as well, as pull requests get worked out.
 deps/vanillae:
-	$(git-clone) https://github.com/aeternity/Vanillae.git deps/vanillae
+	$(git-clone) https://github.com/spiveeworks/Vanillae.git deps/vanillae
 
 
 # Single rule for all beam files: find an erlang file with the same name, and

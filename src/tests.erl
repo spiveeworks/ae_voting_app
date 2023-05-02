@@ -113,8 +113,16 @@ create_poll() ->
 
     ok.
 
+adt_test() ->
+    {ok, AACI} = vanillae:prepare_contract("contracts/ADT_Test.aes"),
+    io:format("ADT AACI: ~n~p~n", [AACI]),
+
+    ok.
+
+
 run_tests() ->
     Polls = fetch_polls(),
     io:format("Polls: ~p~n", [Polls]),
+    adt_test(),
     create_poll(),
     ok.
