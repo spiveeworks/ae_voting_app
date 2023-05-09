@@ -46,6 +46,7 @@ decode_bytearray(EncodedStr) ->
     {contract_bytearray, Binary} = aeser_api_encoder:decode(Encoded),
     case Binary of
         <<>> -> {ok, none};
+        <<"Out of gas">> -> {error, out_of_gas};
         _ ->
             Object = aeb_fate_encoding:deserialize(Binary),
             {ok, Object}
@@ -75,6 +76,7 @@ sleep_until_mined(TH) ->
             timer:sleep(1000),
             sleep_until_mined(TH);
         {ok, #{"call_info" := Info}} ->
+            io:format("Extracting return value from: ~n~p~n", [Info]),
             #{"contract_id" := Contract, "return_value" := Encoded} = Info,
             {ok, Object} = decode_bytearray(Encoded),
             {Contract, Object}
@@ -86,24 +88,25 @@ sleep_until_mined(TH) ->
 create_poll_registry() ->
     Key = get_key(),
     CreatorID = Key#keypair.public,
-    io:format("Account: ~s~n", [CreatorID]),
     Path = "contracts/Registry_Compiler_v6.aes",
 
     {ok, CreateTX} = vanillae:contract_create(CreatorID, Path, []),
-    io:format("~nCreate TX:~n~p~n", [CreateTX]),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
-    io:format("~nSigned transaction: ~n~p~n", [SignedTX]),
 
     {ok, Result} = vanillae:post_tx(SignedTX),
     #{"tx_hash" := Hash} = Result,
-    io:format("~nTransaction hash: ~n~s~n", [Hash]),
+    io:format("~nTransaction hash: ~s~n", [Hash]),
 
-    ok.
+    {Contract, _} = sleep_until_mined(Hash),
+
+    io:format("Contract: ~s~n", [Contract]),
+
+    Contract.
 
 
 registry_id() ->
-    "ct_NNTKcrryzc6VNpuKZpvztCGo4Uha4614y5iUih1A12iJfAS7S".
+    "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw".
 
 fetch_polls() ->
     {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
@@ -111,22 +114,23 @@ fetch_polls() ->
     Key = get_key(),
     CallerID = Key#keypair.public,
     ContractID = registry_id(),
-    {ok, TX} = vanillae:contract_call(CallerID, AACI, ContractID, "polls", []),
+    {ok, TX} = vanillae:contract_call(CallerID, 100000, AACI, ContractID, "polls", []),
 
     {ok, Result} = dry_run(TX),
     Result.
 
-fetch_polls_gas() ->
+fetch_polls_gas(ContractID) ->
     {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
 
     Key = get_key(),
     CallerID = Key#keypair.public,
-    ContractID = registry_id(),
-    {ok, TX} = vanillae:contract_call(CallerID, AACI, ContractID, "polls", []),
+    {ok, TX} = vanillae:contract_call(CallerID, 100000, AACI, ContractID, "polls", []),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, TX),
 
     {ok, #{"tx_hash" := Hash}} = vanillae:post_tx(SignedTX),
+
+    io:format("polls() transaction hash: ~s~n", [Hash]),
 
     {_, Result} = sleep_until_mined(Hash),
     Result.
@@ -168,8 +172,14 @@ add_poll_to_registry(RegistryContract, PollContract) ->
     Hash.
 
 adt_test() ->
-    {ok, AACI} = vanillae:prepare_contract("contracts/ADT_Test.aes"),
-    io:format("ADT AACI: ~n~p~n", [AACI]),
+    Key = get_key(),
+    ID = Key#keypair.public,
+
+    Args = [#{"x" => ["NoInts", {"OneInt", 100},
+                      {"TwoInts", 10, 20},
+                      {"NoInts"}],
+              "y" => {5, 6}}],
+    {ok, _CreateTX} = vanillae:contract_create(ID, "contracts/ADT_Test.aes", Args),
 
     ok.
 
@@ -183,7 +193,6 @@ create_and_add_poll(RegistryID) ->
 
     {ok, RegistryInfo} = vanillae:contract(RegistryID),
     io:format("Registry info:~n~p~n", [RegistryInfo]),
-    add_poll_to_registry(RegistryID, PollID),
     TH = add_poll_to_registry(RegistryID, PollID),
     {_, PollIndex} = sleep_until_mined(TH),
     io:format("Poll index ~p~n", [PollIndex]),
@@ -194,9 +203,11 @@ create_and_add_poll(RegistryID) ->
 run_tests() ->
     %adt_test(),
 
-    create_and_add_poll(registry_id()),
+    %RegistryID = create_poll_registry(),
 
-    Polls = fetch_polls_gas(),
+    %create_and_add_poll(RegistryID),
+
+    Polls = fetch_polls(),
     io:format("Polls: ~p~n", [Polls]),
 
     ok.

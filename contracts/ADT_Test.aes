@@ -2,10 +2,12 @@
 contract ADT_Test =
   datatype adt = NoInts | OneInt(int) | TwoInts(int, int)
   type aliased('a) = ('a * 'a)
-  record rec = {x : int, y : adt, z : aliased(int)}
+  record rec = {x : list(adt), y : aliased(int)}
 
   type state = option(int)
 
-  entrypoint init() : option(int) = None
+  entrypoint init(x: rec) : option(int) = None
 
-  entrypoint method(x : option(int), y : rec): adt = y.y
+  entrypoint method(x : option(int), y : rec): int =
+    let (z, _) = y.y
+    z

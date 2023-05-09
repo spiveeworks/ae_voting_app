@@ -19,10 +19,38 @@ start(_Type, _Args) ->
         #{env => #{dispatch => Dispatch}}
     ),
 
-    vanillae:ae_nodes([{"localhost",3013}]),
+    Nodes = peer_list("peerlist"),
+    vanillae:ae_nodes(Nodes),
+    %vanillae:ae_nodes([{"localhost",3013}]),
     vanillae:network_id("ae_uat"),
 
     ae_voting_app_sup:start_link().
+
+peer_list(Path) ->
+    case file:read_file(Path) of
+        {ok, Str} ->
+            Lines = string:lexemes(Str, [$\r, $\n]),
+            peer_list_each(Lines, []);
+        _ -> [{"localhost", 3013}]
+    end.
+
+peer_list_each([Next | Rest], Acc) ->
+    case string:split(Next, "@") of
+        [_, AddrPort] ->
+            case string:split(AddrPort, ":") of
+                [IP, <<"3015">>] ->
+                    Peer = {unicode:characters_to_list(IP), 3013},
+                    peer_list_each(Rest, [Peer | Acc]);
+                It ->
+                    io:format("It: ~p~n", [It]),
+                    peer_list_each(Rest, Acc)
+            end;
+        _ -> peer_list_each(Rest, Acc)
+    end;
+peer_list_each([], []) ->
+    [{"localhost", 3013}];
+peer_list_each([], Acc) ->
+    lists:reverse(Acc).
 
 stop(_State) ->
     ok.
