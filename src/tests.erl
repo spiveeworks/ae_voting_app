@@ -41,45 +41,35 @@ sign_transaction_base58(Priv, EncodedTX) ->
 get_key() ->
     load_keypair("keypair").
 
-decode_bytearray(EncodedStr) ->
-    Encoded = unicode:characters_to_binary(EncodedStr),
-    {contract_bytearray, Binary} = aeser_api_encoder:decode(Encoded),
-    case Binary of
-        <<>> -> {ok, none};
-        <<"Out of gas">> -> {error, out_of_gas};
-        _ ->
-            Object = aeb_fate_encoding:deserialize(Binary),
-            {ok, Object}
-    end.
-
-
-dry_run(TX) ->
-    case vanillae:dry_run(TX) of
-        {ok, #{"results" := [#{"call_obj" := Obj}]}} ->
-            #{"return_value" := EncodedStr} = Obj,
-            decode_bytearray(EncodedStr);
-        _ -> error
-    end.
-
-sleep_until_mined(TH) ->
+tx_contract(TH) ->
     case vanillae:tx_info(TH) of
+        {ok, #{"call_info" := #{"contract_id" := Contract}}} ->
+            {ok, Contract};
+        {error, Reason} -> {error, Reason}
+    end.
+
+sleep_until_result_mined(AACI, Fun, TH) ->
+    sleep_until_thunk_mined(fun() -> vanillae:tx_result(AACI, Fun, TH) end).
+
+sleep_until_contract_mined(TH) ->
+    sleep_until_thunk_mined(fun() -> tx_contract(TH) end).
+
+sleep_until_thunk_mined(F) ->
+    case F() of
         {error, "Tx not mined"} ->
             io:format("Tx not mined. Sleeping...~n", []),
             timer:sleep(1000),
-            sleep_until_mined(TH);
+            sleep_until_thunk_mined(F);
         {error, "Transaction not found"} ->
             io:format("Tx not found. Sleeping...~n", []),
             timer:sleep(1000),
-            sleep_until_mined(TH);
+            sleep_until_thunk_mined(F);
         {error, timeout} ->
             io:format("Node timed out. Sleeping...~n", []),
             timer:sleep(1000),
-            sleep_until_mined(TH);
-        {ok, #{"call_info" := Info}} ->
-            io:format("Extracting return value from: ~n~p~n", [Info]),
-            #{"contract_id" := Contract, "return_value" := Encoded} = Info,
-            {ok, Object} = decode_bytearray(Encoded),
-            {Contract, Object}
+            sleep_until_thunk_mined(F);
+        {ok, Result} ->
+            {ok, Result}
     end.
 
 
@@ -98,7 +88,7 @@ create_poll_registry() ->
     #{"tx_hash" := Hash} = Result,
     io:format("~nTransaction hash: ~s~n", [Hash]),
 
-    {Contract, _} = sleep_until_mined(Hash),
+    {ok, Contract} = sleep_until_contract_mined(Hash),
 
     io:format("Contract: ~s~n", [Contract]),
 
@@ -116,10 +106,12 @@ fetch_polls() ->
     ContractID = registry_id(),
     {ok, TX} = vanillae:contract_call(CallerID, 100000, AACI, ContractID, "polls", []),
 
-    {ok, Result} = dry_run(TX),
+    {ok, Result} = vanillae:dry_run_result(AACI, "polls", TX),
     Result.
 
-fetch_polls_gas(ContractID) ->
+fetch_polls_gas() ->
+    ContractID = registry_id(),
+
     {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
 
     Key = get_key(),
@@ -132,7 +124,7 @@ fetch_polls_gas(ContractID) ->
 
     io:format("polls() transaction hash: ~s~n", [Hash]),
 
-    {_, Result} = sleep_until_mined(Hash),
+    {ok, Result} = sleep_until_result_mined(AACI, "polls", Hash),
     Result.
 
 create_poll_contract() ->
@@ -169,7 +161,11 @@ add_poll_to_registry(RegistryContract, PollContract) ->
 
     {ok, Result} = vanillae:post_tx(SignedTX),
     #{"tx_hash" := Hash} = Result,
-    Hash.
+
+    {ok, PollIndex} = sleep_until_result_mined(AACI, "add_poll", Hash),
+    io:format("Poll index ~p~n", [PollIndex]),
+
+    PollIndex.
 
 adt_test() ->
     Key = get_key(),
@@ -186,16 +182,15 @@ adt_test() ->
 create_and_add_poll(RegistryID) ->
     {ok, Hash} = create_poll_contract(),
     io:format("~nTransaction hash: ~n~s~n", [Hash]),
-    {PollID, Result} = sleep_until_mined(Hash),
-    io:format("Contract id: ~s... Return value: ~p~n", [PollID, Result]),
+    {ok, PollID} = sleep_until_contract_mined(Hash),
+    io:format("Contract id: ~s~n", [PollID]),
     {ok, PollInfo} = vanillae:contract(PollID),
     io:format("Poll info:~n~p~n", [PollInfo]),
 
     {ok, RegistryInfo} = vanillae:contract(RegistryID),
     io:format("Registry info:~n~p~n", [RegistryInfo]),
-    TH = add_poll_to_registry(RegistryID, PollID),
-    {_, PollIndex} = sleep_until_mined(TH),
-    io:format("Poll index ~p~n", [PollIndex]),
+
+    add_poll_to_registry(RegistryID, PollID),
 
     ok.
 
@@ -207,7 +202,7 @@ run_tests() ->
 
     %create_and_add_poll(RegistryID),
 
-    Polls = fetch_polls(),
+    Polls = fetch_polls_gas(),
     io:format("Polls: ~p~n", [Polls]),
 
     ok.
