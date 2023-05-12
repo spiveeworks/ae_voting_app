@@ -42,35 +42,31 @@ get_key() ->
     load_keypair("keypair").
 
 get_pubkey() ->
-    K = get_key(),
+    K = load_keypair("dryrun_keypair"),
     K#keypair.public.
 
-tx_contract(TH) ->
-    case vanillae:tx_info(TH) of
-        {ok, #{"call_info" := #{"contract_id" := Contract}}} ->
-            {ok, Contract};
-        {error, Reason} -> {error, Reason}
-    end.
-
-sleep_until_result_mined(AACI, Fun, TH) ->
-    sleep_until_thunk_mined(fun() -> vanillae:tx_result(AACI, Fun, TH) end).
+sleep_until_result_mined(ResultType, TH) ->
+    sleep_until_thunk_mined(fun() -> query_man:tx_result(ResultType, TH) end).
 
 sleep_until_contract_mined(TH) ->
-    sleep_until_thunk_mined(fun() -> tx_contract(TH) end).
+    sleep_until_thunk_mined(fun() -> query_man:tx_contract(TH) end).
 
 sleep_until_thunk_mined(F) ->
     case F() of
         {error, "Tx not mined"} ->
             io:format("Tx not mined. Sleeping...~n", []),
-            timer:sleep(1000),
+            timer:sleep(1),
             sleep_until_thunk_mined(F);
         {error, "Transaction not found"} ->
             io:format("Tx not found. Sleeping...~n", []),
-            timer:sleep(1000),
+            timer:sleep(1),
             sleep_until_thunk_mined(F);
         {error, timeout} ->
             io:format("Node timed out. Sleeping...~n", []),
-            timer:sleep(1000),
+            timer:sleep(1),
+            sleep_until_thunk_mined(F);
+        {error, queried_recently} ->
+            timer:sleep(1),
             sleep_until_thunk_mined(F);
         {ok, Result} ->
             {ok, Result}
@@ -102,12 +98,10 @@ registry_id() ->
     "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw".
 
 fetch_polls_gas() ->
-    {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
-
     Key = get_key(),
     CallerID = Key#keypair.public,
 
-    {ok, TX} = contract_man:query_polls_tx(CallerID, registry_id()),
+    {ok, {PollType, TX}} = contract_man:query_polls_tx(CallerID, registry_id()),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, TX),
 
@@ -115,7 +109,7 @@ fetch_polls_gas() ->
 
     io:format("polls() transaction hash: ~s~n", [Hash]),
 
-    {ok, Result} = sleep_until_result_mined(AACI, "polls", Hash),
+    {ok, Result} = sleep_until_result_mined(PollType, Hash),
     Result.
 
 create_poll_contract() ->
@@ -138,16 +132,15 @@ add_poll_to_registry(RegistryContract, PollContract) ->
     Key = get_key(),
     ID = Key#keypair.public,
 
-    {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
-
-    {ok, TX} = contract_man:register_poll(ID, RegistryContract, PollContract, true),
+    {ok, {ResultType, TX}} = contract_man:register_poll(ID, RegistryContract,
+                                                        PollContract, true),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, TX),
 
     {ok, Result} = vanillae:post_tx(SignedTX),
     #{"tx_hash" := Hash} = Result,
 
-    {ok, PollIndex} = sleep_until_result_mined(AACI, "add_poll", Hash),
+    {ok, PollIndex} = sleep_until_result_mined(ResultType, Hash),
     io:format("Poll index ~p~n", [PollIndex]),
 
     PollIndex.
@@ -183,12 +176,12 @@ create_and_add_poll(RegistryID) ->
 run_tests() ->
     %adt_test(),
 
-    %RegistryID = create_poll_registry(),
+    RegistryID = create_poll_registry(),
 
-    %create_and_add_poll(RegistryID),
+    create_and_add_poll(RegistryID),
 
-    {ok, Polls} = contract_man:query_polls(registry_id()),
-    io:format("Polls: ~p~n", [Polls]),
+    %{ok, Polls} = contract_man:query_polls_gas(registry_id()),
+    %io:format("Polls: ~p~n", [Polls]),
 
     ok.
 

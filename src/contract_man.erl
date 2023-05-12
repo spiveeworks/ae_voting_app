@@ -5,7 +5,6 @@
 -export([create_registry/1, query_polls_tx/2, query_polls/1, create_poll/7,
          register_poll/4]).
 -export([init/1, handle_call/3, handle_cast/2]).
--export([tx_info_convert_result/2]). % TODO: move this somewhere
 
 -spec start_link() ->
     ReturnStatus :: gen_server:start_ret().
@@ -31,6 +30,9 @@ create_poll(ID, Title, Description, Link, SpecRef, Options, Age) ->
 
 register_poll(ID, RegistryID, PollID, Listed) ->
     gen_server:call(?MODULE, {register_poll, ID, RegistryID, PollID, Listed}).
+
+%%%%%%%%%%%%%%%%%%
+% Implementation
 
 -record(cms, {registry_path, registry_aaci, poll_path, poll_aaci, dry_run_id}).
 
@@ -125,7 +127,14 @@ do_create_poll(State, ID, Title, Description, Link, SpecRef, Options, Age) ->
 do_register_poll(State, ID, RegistryID, PollID, Listed) ->
     RegistryAACI = State#cms.registry_aaci,
 
-    vanillae:contract_call(ID, RegistryAACI, RegistryID, "add_poll", [PollID, Listed]).
+    FormationResult = vanillae:contract_call(ID, RegistryAACI, RegistryID,
+                                             "add_poll", [PollID, Listed]),
+    case FormationResult of
+        {ok, TX} ->
+            {ok, {_, T}} = vanillae:aaci_lookup_spec(RegistryAACI, "add_poll"),
+            {ok, {T, TX}};
+        Error = {error, _} -> Error
+    end.
 
 option(none) -> "None";
 option(A) -> {"Some", A}.
@@ -136,12 +145,5 @@ dry_run_convert_result(ResultDef, {ok, Result}) ->
             vanillae:decode_bytearray(ResultDef, EncodedStr);
         #{"results" := [#{"reason" := Message}]} ->
             {error, Message}
-    end.
-
-tx_info_convert_result(ResultDef, Result) ->
-    case Result of
-        {ok, #{"call_info" := #{"return_value" := Encoded}}} ->
-            vanillae:decode_bytearray(ResultDef, Encoded);
-        {error, Reason} -> {error, Reason}
     end.
 
