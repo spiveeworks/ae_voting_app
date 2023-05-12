@@ -1,6 +1,6 @@
 -module(tests).
 
--export([run_tests/0]).
+-export([run_tests/0, get_pubkey/0]).
 
 -compile([export_all]).
 
@@ -41,6 +41,10 @@ sign_transaction_base58(Priv, EncodedTX) ->
 get_key() ->
     load_keypair("keypair").
 
+get_pubkey() ->
+    K = get_key(),
+    K#keypair.public.
+
 tx_contract(TH) ->
     case vanillae:tx_info(TH) of
         {ok, #{"call_info" := #{"contract_id" := Contract}}} ->
@@ -78,9 +82,8 @@ sleep_until_thunk_mined(F) ->
 create_poll_registry() ->
     Key = get_key(),
     CreatorID = Key#keypair.public,
-    Path = "contracts/Registry_Compiler_v6.aes",
 
-    {ok, CreateTX} = vanillae:contract_create(CreatorID, Path, []),
+    {ok, CreateTX} = contract_man:create_registry(CreatorID),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
 
@@ -98,25 +101,13 @@ create_poll_registry() ->
 registry_id() ->
     "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw".
 
-fetch_polls() ->
-    {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
-
-    Key = get_key(),
-    CallerID = Key#keypair.public,
-    ContractID = registry_id(),
-    {ok, TX} = vanillae:contract_call(CallerID, 100000, AACI, ContractID, "polls", []),
-
-    {ok, Result} = vanillae:dry_run_result(AACI, "polls", TX),
-    Result.
-
 fetch_polls_gas() ->
-    ContractID = registry_id(),
-
     {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
 
     Key = get_key(),
     CallerID = Key#keypair.public,
-    {ok, TX} = vanillae:contract_call(CallerID, 100000, AACI, ContractID, "polls", []),
+
+    {ok, TX} = contract_man:query_polls_tx(CallerID, registry_id()),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, TX),
 
@@ -130,20 +121,12 @@ fetch_polls_gas() ->
 create_poll_contract() ->
     Key = get_key(),
     ID = Key#keypair.public,
-    PollPath = "contracts/Poll_Iris.aes",
 
-    PollMetadata = #{"title" => "Test Poll",
-                     "description" => "Dummy poll for testing the poll contract.",
-                     "link" => "example.com",
-                     "spec_ref" => "None"},
-
+    Description = "Dummy poll for testing the poll contract",
     Options = #{1 => "option 1", 2 => "option 2"},
-    {ok, TopHeight} = vanillae:top_height(),
-    CloseHeight = TopHeight + 100,
-    PollArgs = [PollMetadata, Options, {"Some", CloseHeight}],
-
-    {ok, CreateTX} = vanillae:contract_create(ID, PollPath, PollArgs),
-    io:format("Tx: ~s~n", [CreateTX]),
+    {ok, CreateTX} = contract_man:create_poll(ID, "Test Poll", Description,
+                                              "example.com", none, Options,
+                                              100),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
 
@@ -154,8 +137,10 @@ create_poll_contract() ->
 add_poll_to_registry(RegistryContract, PollContract) ->
     Key = get_key(),
     ID = Key#keypair.public,
+
     {ok, AACI} = vanillae:prepare_contract("contracts/Registry_Compiler_v6.aes"),
-    {ok, TX} = vanillae:contract_call(ID, AACI, RegistryContract, "add_poll", [PollContract, true]),
+
+    {ok, TX} = contract_man:register_poll(ID, RegistryContract, PollContract, true),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, TX),
 
@@ -202,7 +187,7 @@ run_tests() ->
 
     %create_and_add_poll(RegistryID),
 
-    Polls = fetch_polls_gas(),
+    {ok, Polls} = contract_man:query_polls(registry_id()),
     io:format("Polls: ~p~n", [Polls]),
 
     ok.

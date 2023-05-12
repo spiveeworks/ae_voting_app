@@ -13,6 +13,16 @@ init([]) ->
             id => counter,
             start => {counter, start_link, [0]}
         },
+
+        #{
+            id => contract_man,
+            start => {contract_man, start_link, []}
+        },
+        #{
+            id => query_man,
+            start => {query_man, start_link, []}
+        },
+
         #{
             id => poll_keeper,
             start => {poll_keeper, start_link, []}
