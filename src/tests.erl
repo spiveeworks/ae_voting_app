@@ -46,8 +46,6 @@ get_pubkey() ->
     K#keypair.public.
 
 
-% TODO: Make this run asynchronously, and poll for when the contract is
-% created?
 create_poll_registry() ->
     Key = get_key(),
     CreatorID = Key#keypair.public,
@@ -176,11 +174,11 @@ create_registry_and_poll_parallel() ->
 run_tests() ->
     %adt_test(),
 
-    RegistryID = create_registry_and_poll_parallel(),
+    %RegistryID = create_registry_and_poll_parallel(),
     %create_and_add_poll(RegistryID),
 
-    %{ok, Polls} = contract_man:query_polls(registry_id()),
-    Polls = fetch_polls_gas(RegistryID),
+    {ok, Polls} = contract_man:query_polls(registry_id()),
+    %Polls = fetch_polls_gas(RegistryID),
     io:format("Polls: ~p~n", [Polls]),
 
     ok.

@@ -3,7 +3,7 @@
 
 -export([start_link/0]).
 -export([create_registry/1, query_polls_tx/2, query_polls/1, create_poll/7,
-         register_poll/4]).
+         register_poll/4, query_poll_state/1, query_account_balance/1]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
 -spec start_link() ->
@@ -31,6 +31,12 @@ create_poll(ID, Title, Description, Link, SpecRef, Options, Age) ->
 register_poll(ID, RegistryID, PollID, Listed) ->
     gen_server:call(?MODULE, {register_poll, ID, RegistryID, PollID, Listed}).
 
+query_poll_state(PollID) ->
+    gen_server:call(?MODULE, {query_poll_state, PollID}).
+
+query_account_balance(ID) ->
+    gen_server:call(?MODULE, {query_account_balance, ID}).
+
 %%%%%%%%%%%%%%%%%%
 % Implementation
 
@@ -41,6 +47,7 @@ init({}) ->
     {ok, RegistryAACI} = vanillae:prepare_contract(RegistryPath),
     PollPath = "contracts/Poll_Iris.aes",
     {ok, PollAACI} = vanillae:prepare_contract(PollPath),
+    io:format("Poll AACI:~n~p~n", [PollAACI]),
 
     % TODO: Put this keypair stuff in a devoted key handling module? Stop
     %       storing a private key in the backend?
@@ -69,6 +76,12 @@ handle_call({create_poll, ID, Title, Description, Link, SpecRef, Options, Age}, 
     {reply, Result, State};
 handle_call({register_poll, ID, RegistryID, PollID, Listed}, _, State) ->
     Result = do_register_poll(State, ID, RegistryID, PollID, Listed),
+    {reply, Result, State};
+handle_call({query_poll_state, PollID}, _, State) ->
+    Result = do_query_poll_state(State, PollID),
+    {reply, Result, State};
+handle_call({query_account_balance, ID}, _, State) ->
+    Result = do_query_account_balance(State, ID),
     {reply, Result, State}.
 
 handle_cast(_, State) ->
@@ -108,7 +121,7 @@ do_create_poll(State, ID, Title, Description, Link, SpecRef, Options, Age) ->
                      "spec_ref" => option(SpecRef)},
 
     CloseHeight = case Age of
-                      infinite ->
+                      endless ->
                           "None";
                       _ ->
                           case vanillae:top_height() of
@@ -135,6 +148,29 @@ do_register_poll(State, ID, RegistryID, PollID, Listed) ->
             {ok, {T, TX}};
         Error = {error, _} -> Error
     end.
+
+do_query_poll_state_tx(State, ID, PollID) ->
+    AACI = State#cms.poll_aaci,
+    case vanillae:contract_call(ID, 1000000, AACI, PollID, "get_state", []) of
+        {ok, TX} ->
+            {ok, {_, Type}} = vanillae:aaci_lookup_spec(AACI, "get_state"),
+            {ok, {Type, TX}};
+        Error = {error, _} -> Error
+    end.
+
+do_query_poll_state(State, PollID) ->
+    ID = State#cms.dry_run_id,
+
+    case do_query_poll_state_tx(State, ID, PollID) of
+        {ok, {StateType, TX}} ->
+            Result = vanillae:dry_run(TX),
+            dry_run_convert_result(StateType, Result);
+        Error ->
+            Error
+    end.
+
+do_query_account_balance(_State, _ID) ->
+    1.
 
 option(none) -> "None";
 option(A) -> {"Some", A}.

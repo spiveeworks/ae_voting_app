@@ -10,7 +10,7 @@
 
 -record(poll_vote,
         {address :: term(), % what should this be? Some Vanillae thing?
-         weight :: pos_integer()}).
+         weight :: non_neg_integer()}).
 
 -record(poll_option,
         {name :: string(),
@@ -19,20 +19,24 @@
 
 % TODO: add fields for creator, curation status, etc.
 -record(poll,
-        {id :: pos_integer(),
+        {chain_id :: vanillae:contract_id(),
          title :: string(),
-         options :: [#poll_option{}, ...]}).
+         description :: string(),
+         url = "" :: string(),
+         % spec_ref = none :: none | vanillae:tx_hash(),
+         close_height :: integer() | endless,
+         options :: #{integer() => #poll_option{}}}).
 
 -record(pks,
-        {polls = [] :: [#poll{}],
-         next_poll_id = 1 :: pos_integer()}).
+        {registry_id :: vanillae:contract_id(),
+         polls = #{} :: #{pos_integer() => #poll{}}}).
 
 %%
 % External Interface
 %%
 
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, empty, []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, {}, []).
 
 add_poll(Title, Options) ->
     gen_server:cast(?MODULE, {add_poll, Title, Options}).
@@ -51,14 +55,16 @@ get_poll_options(Id) ->
 % Callbacks
 %%
 
-init(empty) ->
+init({}) ->
     spawn(tests, run_tests, []),
-    {ok, #pks{}}.
+    {ok, [RegistryID]} = file:consult("registry_id"),
+    State = initial_state(RegistryID),
+    {ok, #pks{registry_id = State}}.
 
 handle_call(get_polls, _, State) ->
     {reply, State#pks.polls, State};
 handle_call(get_poll_titles, _, State) ->
-    Titles = do_get_poll_titles(State),
+    Titles = do_get_poll_titles(State#pks.polls),
     {reply, Titles, State};
 handle_call({get_poll_options, Id}, _, State) ->
     Options = do_get_poll_options(Id, State),
@@ -72,27 +78,74 @@ handle_cast({add_poll, Title, Options}, State) ->
 % Doers
 %%
 
-lookup_poll(Id, State) ->
-    lists:keyfind(Id, #poll.id, State#pks.polls).
-
-do_get_poll_titles(State) ->
-    [Title || #poll{title = Title} <- State#pks.polls].
+do_get_poll_titles(Polls) ->
+    maps:fold(fun(_, #poll{title = P}, Ps) -> [P | Ps] end, [], Polls).
 
 do_get_poll_options(Id, State) ->
-    case lookup_poll(Id, State) of
+    case mapse:find(Id, State#pks.polls) of
         #poll{options = Options} ->
             Names = [Name || #poll_option{name = Name} <- Options],
             {ok, Names};
-        false ->
+        error ->
             {err, not_found}
     end.
 
-create_poll(Id, Title, OptionNames) ->
-    Options = [#poll_option{name = Name} || Name <- OptionNames],
-    #poll{id = Id, title = Title, options = Options}.
+do_add_poll(_Title, _Options, State) ->
+    io:print("Warning: do_add_poll is not yet implemented.~n", []),
+    State.
 
-do_add_poll(Title, Options, State) ->
-    Id = State#pks.next_poll_id,
-    NewPoll = create_poll(Id, Title, Options),
-    State#pks{polls = [NewPoll | State#pks.polls], next_poll_id = Id + 1}.
+%%
+% Ground Truth
+%%
+
+initial_state(RegistryID) ->
+    {ok, PollMap} = contract_man:query_polls(RegistryID),
+
+    Polls = maps:map(fun read_poll_from_registry/2, PollMap),
+    #pks{registry_id = RegistryID, polls = Polls}.
+
+read_poll_from_registry(_Index, PollInfo) ->
+    PollID = maps:get("poll", PollInfo),
+
+    {ok, PollState} = contract_man:query_poll_state(PollID),
+
+    Metadata = maps:get("metadata", PollState),
+    Title = maps:get("title", Metadata),
+    Description = maps:get("description", Metadata),
+    URL = maps:get("link", Metadata),
+
+    OptionNames = maps:get("vote_options", PollState),
+    CloseHeight = case maps:get("close_height", PollState) of
+                      {"None"} -> endless;
+                      {"Some", Height} -> Height
+                  end,
+    VotesMap = maps:get("votes", PollState),
+
+    OptionsNoVotes = maps:map(fun(Name) -> #poll_option{name = Name} end,
+                              OptionNames),
+
+    AddVote = fun(ID, OptionIndex, Options) ->
+                      case maps:find(OptionIndex, Options) of
+                          {ok, O} ->
+                              Weight = contract_man:query_account_balance(),
+                              Vote = #poll_vote{address = ID, weight = Weight},
+
+                              Votes = O#poll_option.votes,
+                              NewTally = O#poll_option.vote_tally + Weight,
+
+                              O2 = O#poll_option{votes = [Vote | Votes],
+                                                 vote_tally = NewTally},
+                              maps:put(OptionIndex, O2, Options);
+                          error ->
+                              Options
+                      end
+              end,
+    Options = maps:fold(AddVote, OptionsNoVotes, VotesMap),
+
+    #poll{chain_id = PollID,
+          title = Title,
+          description = Description,
+          url = URL,
+          close_height = CloseHeight,
+          options = Options}.
 
