@@ -45,33 +45,6 @@ get_pubkey() ->
     K = load_keypair("dryrun_keypair"),
     K#keypair.public.
 
-sleep_until_result_mined(ResultType, TH) ->
-    sleep_until_thunk_mined(fun() -> query_man:tx_result(ResultType, TH) end).
-
-sleep_until_contract_mined(TH) ->
-    sleep_until_thunk_mined(fun() -> query_man:tx_contract(TH) end).
-
-sleep_until_thunk_mined(F) ->
-    case F() of
-        {error, "Tx not mined"} ->
-            io:format("Tx not mined. Sleeping...~n", []),
-            timer:sleep(1),
-            sleep_until_thunk_mined(F);
-        {error, "Transaction not found"} ->
-            io:format("Tx not found. Sleeping...~n", []),
-            timer:sleep(1),
-            sleep_until_thunk_mined(F);
-        {error, timeout} ->
-            io:format("Node timed out. Sleeping...~n", []),
-            timer:sleep(1),
-            sleep_until_thunk_mined(F);
-        {error, queried_recently} ->
-            timer:sleep(1),
-            sleep_until_thunk_mined(F);
-        {ok, Result} ->
-            {ok, Result}
-    end.
-
 
 % TODO: Make this run asynchronously, and poll for when the contract is
 % created?
@@ -83,11 +56,10 @@ create_poll_registry() ->
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
 
-    {ok, Result} = vanillae:post_tx(SignedTX),
-    #{"tx_hash" := Hash} = Result,
-    io:format("~nTransaction hash: ~s~n", [Hash]),
-
-    {ok, Contract} = sleep_until_contract_mined(Hash),
+    query_man:post_tx_contract(self(), "create poll registry", SignedTX),
+    {ok, Contract} = receive
+                         {subscribe_tx, "create poll registry", A} -> A
+                     end,
 
     io:format("Contract: ~s~n", [Contract]),
 
@@ -97,19 +69,19 @@ create_poll_registry() ->
 registry_id() ->
     "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw".
 
-fetch_polls_gas() ->
+fetch_polls_gas(RegistryID) ->
     Key = get_key(),
     CallerID = Key#keypair.public,
 
-    {ok, {PollType, TX}} = contract_man:query_polls_tx(CallerID, registry_id()),
+    {ok, {PollType, TX}} = contract_man:query_polls_tx(CallerID, RegistryID),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, TX),
 
-    {ok, #{"tx_hash" := Hash}} = vanillae:post_tx(SignedTX),
+    query_man:post_tx_result(self(), "fetch polls", PollType, SignedTX),
+    {ok, Result} = receive
+                       {subscribe_tx, "fetch polls", A} -> A
+                   end,
 
-    io:format("polls() transaction hash: ~s~n", [Hash]),
-
-    {ok, Result} = sleep_until_result_mined(PollType, Hash),
     Result.
 
 create_poll_contract() ->
@@ -137,10 +109,11 @@ add_poll_to_registry(RegistryContract, PollContract) ->
 
     SignedTX = sign_transaction_base58(Key#keypair.private, TX),
 
-    {ok, Result} = vanillae:post_tx(SignedTX),
-    #{"tx_hash" := Hash} = Result,
+    query_man:post_tx_result(self(), "add poll", ResultType, SignedTX),
+    {ok, PollIndex} = receive
+                          {subscribe_tx, "add poll", A} -> A
+                      end,
 
-    {ok, PollIndex} = sleep_until_result_mined(ResultType, Hash),
     io:format("Poll index ~p~n", [PollIndex]),
 
     PollIndex.
@@ -160,7 +133,10 @@ adt_test() ->
 create_and_add_poll(RegistryID) ->
     {ok, Hash} = create_poll_contract(),
     io:format("~nTransaction hash: ~n~s~n", [Hash]),
-    {ok, PollID} = sleep_until_contract_mined(Hash),
+    query_man:subscribe_tx_contract(self(), "create poll", Hash),
+    {ok, PollID} = receive
+                       {subscribe_tx, "create poll", A} -> A
+                   end,
     io:format("Contract id: ~s~n", [PollID]),
     {ok, PollInfo} = vanillae:contract(PollID),
     io:format("Poll info:~n~p~n", [PollInfo]),
@@ -172,16 +148,40 @@ create_and_add_poll(RegistryID) ->
 
     ok.
 
+create_registry_and_poll_parallel() ->
+    Key = load_keypair("dryrun_keypair"),
+    CreatorID = Key#keypair.public,
+
+    {ok, CreateTX} = contract_man:create_registry(CreatorID),
+
+    SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
+
+    query_man:post_tx_contract(self(), "create poll registry", SignedTX),
+    {ok, Hash} = create_poll_contract(),
+    io:format("~nTransaction hash: ~n~s~n", [Hash]),
+    query_man:subscribe_tx_contract(self(), "create poll", Hash),
+
+    {ok, RegistryID} = receive
+                           {subscribe_tx, "create poll registry", A} -> A
+                       end,
+
+    {ok, PollID} = receive
+                       {subscribe_tx, "create poll", B} -> B
+                   end,
+
+    add_poll_to_registry(RegistryID, PollID),
+
+    RegistryID.
 
 run_tests() ->
     %adt_test(),
 
-    RegistryID = create_poll_registry(),
+    RegistryID = create_registry_and_poll_parallel(),
+    %create_and_add_poll(RegistryID),
 
-    create_and_add_poll(RegistryID),
-
-    %{ok, Polls} = contract_man:query_polls_gas(registry_id()),
-    %io:format("Polls: ~p~n", [Polls]),
+    %{ok, Polls} = contract_man:query_polls(registry_id()),
+    Polls = fetch_polls_gas(RegistryID),
+    io:format("Polls: ~p~n", [Polls]),
 
     ok.
 
