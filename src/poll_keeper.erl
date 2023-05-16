@@ -59,7 +59,7 @@ init({}) ->
     spawn(tests, run_tests, []),
     {ok, [RegistryID]} = file:consult("registry_id"),
     State = initial_state(RegistryID),
-    {ok, #pks{registry_id = State}}.
+    {ok, State}.
 
 handle_call(get_polls, _, State) ->
     {reply, State#pks.polls, State};
@@ -121,7 +121,7 @@ read_poll_from_registry(_Index, PollInfo) ->
                   end,
     VotesMap = maps:get("votes", PollState),
 
-    OptionsNoVotes = maps:map(fun(Name) -> #poll_option{name = Name} end,
+    OptionsNoVotes = maps:map(fun(_, Name) -> #poll_option{name = Name} end,
                               OptionNames),
 
     AddVote = fun(ID, OptionIndex, Options) ->

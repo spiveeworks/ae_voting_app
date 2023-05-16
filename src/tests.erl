@@ -67,21 +67,6 @@ create_poll_registry() ->
 registry_id() ->
     "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw".
 
-fetch_polls_gas(RegistryID) ->
-    Key = get_key(),
-    CallerID = Key#keypair.public,
-
-    {ok, {PollType, TX}} = contract_man:query_polls_tx(CallerID, RegistryID),
-
-    SignedTX = sign_transaction_base58(Key#keypair.private, TX),
-
-    query_man:post_tx_result(self(), "fetch polls", PollType, SignedTX),
-    {ok, Result} = receive
-                       {subscribe_tx, "fetch polls", A} -> A
-                   end,
-
-    Result.
-
 create_poll_contract() ->
     Key = get_key(),
     ID = Key#keypair.public,
@@ -177,8 +162,7 @@ run_tests() ->
     %RegistryID = create_registry_and_poll_parallel(),
     %create_and_add_poll(RegistryID),
 
-    {ok, Polls} = contract_man:query_polls(registry_id()),
-    %Polls = fetch_polls_gas(RegistryID),
+    Polls = poll_keeper:get_polls(),
     io:format("Polls: ~p~n", [Polls]),
 
     ok.

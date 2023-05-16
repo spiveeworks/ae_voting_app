@@ -47,7 +47,6 @@ init({}) ->
     {ok, RegistryAACI} = vanillae:prepare_contract(RegistryPath),
     PollPath = "contracts/Poll_Iris.aes",
     {ok, PollAACI} = vanillae:prepare_contract(PollPath),
-    io:format("Poll AACI:~n~p~n", [PollAACI]),
 
     % TODO: Put this keypair stuff in a devoted key handling module? Stop
     %       storing a private key in the backend?
