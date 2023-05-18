@@ -29,7 +29,7 @@
     }
 
     async function updatePolls() {
-        json = await fetch("./api/getPolls");
+        json = await fetch(window.location.origin + "/api/getPolls");
         object = await json.json();
         generateTable(object.polls);
     }

@@ -2,7 +2,7 @@
 -behavior(cowboy_handler).
 
 -export([init/2, allowed_methods/2]).
--export([content_types_provided/2, to_json/2]).
+-export([resource_exists/2, content_types_provided/2, to_json/2]).
 
 init(Req, State) ->
     {cowboy_rest, Req, State}.
@@ -17,9 +17,25 @@ content_types_provided(Req, State) ->
     ],
     {Provided, Req, State}.
 
+resource_exists(Req, get_polls) ->
+    {true, Req, get_polls};
+resource_exists(Req, get_poll_info) ->
+     PollID = cowboy_req:binding(id, Req),
+     case poll_keeper:get_poll(PollID) of
+         {ok, Poll} -> {true, Req, {get_poll_info, PollID, Poll}};
+         {error, not_found} -> {false, Req, {get_poll_info, #{}}}
+     end.
+
 to_json(Req, State) ->
-    Data = encode_polls(),
+    Data = case State of
+               get_polls ->
+                   encode_polls();
+               {get_poll_info, PollID, Poll} ->
+                   encode_poll_info(PollID, Poll)
+           end,
     {Data, Req, State}.
+
+% Encode a list of all polls
 
 encode_polls() ->
     PollMap = poll_keeper:get_polls(),
@@ -28,13 +44,16 @@ encode_polls() ->
     zj:encode(#{polls => PollsSorted}).
 
 add_poll(ID, {poll, _, Title, _, _, CloseHeight, OptionMap}, Acc) ->
-    Options = maps:fold(fun add_score/3, [], OptionMap),
-    OptionsSorted = lists:sort(fun order_options/2, Options),
+    Options = format_options(OptionMap),
     Poll = #{id => ID,
              title => Title,
              close_height => CloseHeight,
-             scores => OptionsSorted},
+             scores => Options},
     [Poll | Acc].
+
+format_options(OptionMap) ->
+    Options = maps:fold(fun add_score/3, [], OptionMap),
+    lists:sort(fun order_options/2, Options).
 
 add_score(ID, {poll_option, Name, _, Tally}, Acc) ->
     Option = #{id => ID, name => Name, score => Tally},
@@ -49,3 +68,16 @@ order_options(#{score := ScoreA, id := IDA}, #{score := ScoreB, id := IDB}) ->
 
 order_polls(#{id := IDA}, #{id := IDB}) ->
     IDA >= IDB.
+
+% Encode info about one poll
+
+encode_poll_info(PollID, Poll) ->
+    {poll, _, Title, Description, URL, CloseHeight, OptionMap} = Poll,
+    Options = format_options(OptionMap),
+    zj:encode(#{id => PollID,
+                title => Title,
+                description => Description,
+                url => URL,
+                close_height => CloseHeight,
+                options => Options}).
+

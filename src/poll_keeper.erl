@@ -1,7 +1,7 @@
 -module(poll_keeper).
 -behaviour(gen_server).
 
--export([start_link/0, add_poll/2, get_polls/0, get_poll_titles/0, get_poll_options/1]).
+-export([start_link/0, add_poll/2, get_polls/0, get_poll_titles/0, get_poll/1]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
 %%
@@ -47,8 +47,8 @@ get_polls() ->
 get_poll_titles() ->
     gen_server:call(?MODULE, get_poll_titles).
 
-get_poll_options(Id) ->
-    gen_server:call(?MODULE, {get_poll_options, Id}).
+get_poll(Id) ->
+    gen_server:call(?MODULE, {get_poll, Id}).
 
 
 %%
@@ -66,8 +66,8 @@ handle_call(get_polls, _, State) ->
 handle_call(get_poll_titles, _, State) ->
     Titles = do_get_poll_titles(State#pks.polls),
     {reply, Titles, State};
-handle_call({get_poll_options, Id}, _, State) ->
-    Options = do_get_poll_options(Id, State),
+handle_call({get_poll, Id}, _, State) ->
+    Options = do_get_poll(Id, State),
     {reply, Options, State}.
 
 handle_cast({add_poll, Title, Options}, State) ->
@@ -81,13 +81,12 @@ handle_cast({add_poll, Title, Options}, State) ->
 do_get_poll_titles(Polls) ->
     maps:fold(fun(_, #poll{title = P}, Ps) -> [P | Ps] end, [], Polls).
 
-do_get_poll_options(Id, State) ->
-    case mapse:find(Id, State#pks.polls) of
-        #poll{options = Options} ->
-            Names = [Name || #poll_option{name = Name} <- Options],
-            {ok, Names};
+do_get_poll(Id, State) ->
+    case maps:find(Id, State#pks.polls) of
+        {ok, Poll} ->
+            {ok, Poll};
         error ->
-            {err, not_found}
+            {error, not_found}
     end.
 
 do_add_poll(_Title, _Options, State) ->

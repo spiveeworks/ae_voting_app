@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<script>
+    function generateTable(data) {
+        let table = document.querySelector("table");
+
+        for (let element of data) {
+            let row = table.insertRow();
+
+            row.insertCell()
+               .appendChild(document.createTextNode(element.name));
+            row.insertCell()
+               .appendChild(document.createTextNode(element.score));
+        }
+
+        // Generate the head AFTER the body, because of course.
+        let thead = table.createTHead();
+        let row = thead.insertRow();
+
+        let th1 = document.createElement("th");
+        th1.appendChild(document.createTextNode("Option"));
+        row.appendChild(th1);
+
+        let th2 = document.createElement("th");
+        th2.appendChild(document.createTextNode("Score"));
+        row.appendChild(th2);
+    }
+
+    async function updatePolls() {
+        id = getID();
+        document.getElementById("title").innerHTML = "Poll " + id;
+
+        response = await fetch(window.location.origin + "/api/poll/" + id);
+        if (response.ok) {
+            object = await response.json();
+
+            document.getElementById("title").innerHTML = object.title;
+            document.getElementById("description").innerHTML = object.description;
+
+            generateTable(object.options);
+        } else if (response.status == 404) {
+            document.getElementById("description").innerHTML = "Not found.";
+        } else if (response.status == 500) {
+            document.getElementById("description").innerHTML = "Server error.";
+        }
+    }
+
+    function getID() {
+        text = document.getElementById("text");
+        path = window.location.pathname.split("/");
+        id_str = path[path.length - 1];
+        return id_str; // We could convert this to a number, but it only ever gets used to build HTTP request URLs, so there is no need.
+    }
+
+    window.onload = updatePolls;
+    //setInterval(updateCounter, 1000);
+</script>
+
+<h1 id="title"></h1>
+
+<p id="description">Loading poll...</p>
+
+<table>
+<!-- to be generated client-side --!>
+</table>
+
+</body>
+</html>
+
