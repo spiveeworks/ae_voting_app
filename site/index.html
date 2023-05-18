@@ -3,40 +3,44 @@
 <body>
 
 <script>
-    function updateText(count) {
-        text = document.getElementById("text");
-        text.innerHTML = "The button has been clicked "
-            + count + " times.";
-    }
+    function generateTable(data) {
+        let table = document.querySelector("table");
 
-    async function buttonClicked() {
-        json = await fetch(
-            "./api/increaseCounter",
-            {
-                method: "post",
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({count: 1})
-            }
-        );
-        object = await json.json();
-        updateText(object.value);
-    }
+        for (let element of data) {
+            let row = table.insertRow();
 
-    async function updateCounter() {
-        json = await fetch("./api/increaseCounter");
-            object = await json.json();
-            updateText(object.value);
+            row.insertCell()
+               .appendChild(document.createTextNode(element.title));
+            row.insertCell()
+               .appendChild(document.createTextNode(element.close_height));
         }
 
-    window.onload = updateCounter;
-    setInterval(updateCounter, 1000);
+        // Generate the head AFTER the body, because of course.
+        let thead = table.createTHead();
+        let row = thead.insertRow();
+
+        let th1 = document.createElement("th");
+        th1.appendChild(document.createTextNode("Poll"));
+        row.appendChild(th1);
+
+        let th2 = document.createElement("th");
+        th2.appendChild(document.createTextNode("Close Height"));
+        row.appendChild(th2);
+    }
+
+    async function updatePolls() {
+        json = await fetch("./api/getPolls");
+        object = await json.json();
+        generateTable(object.polls);
+    }
+
+    window.onload = updatePolls;
+    //setInterval(updateCounter, 1000);
 </script>
 
-<p id="text">Loading...</p>
-<button onclick="buttonClicked()">Click</button>
+<table>
+<!-- to be generated client-side --!>
+</table>
 
 </body>
 </html>

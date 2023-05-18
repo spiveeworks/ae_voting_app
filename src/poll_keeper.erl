@@ -56,7 +56,7 @@ get_poll_options(Id) ->
 %%
 
 init({}) ->
-    spawn(tests, run_tests, []),
+    %spawn(tests, run_tests, []),
     {ok, [RegistryID]} = file:consult("registry_id"),
     State = initial_state(RegistryID),
     {ok, State}.

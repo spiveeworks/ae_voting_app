@@ -82,7 +82,7 @@ priv:
 	mkdir priv
 
 priv/enacl_nif.so: deps/enacl/c_src/*.c | priv
-	gcc -fPIC -shared -lsodium -I /usr/lib/erlang/erts-13.1.3/include deps/enacl/c_src/*.c -o priv/enacl_nif.so
+	gcc -fPIC -shared -lsodium -I /usr/lib/erlang/erts-13.2/include deps/enacl/c_src/*.c -o priv/enacl_nif.so
 
 # Applications. 'behaviours' is all of the files that need to be compiled
 # first, to suppress "behaviour undefined" warnings when compiling ranch,

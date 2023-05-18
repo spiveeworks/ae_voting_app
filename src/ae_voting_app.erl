@@ -11,7 +11,9 @@ start(_Type, _Args) ->
     Dispatch = cowboy_router:compile([
         {'_', [
             {"/", cowboy_static, {file, "site/index.html"}},
-            {"/api/increaseCounter", restful, increase_counter}
+            {"/counter", cowboy_static, {file, "site/counter.html"}},
+            {"/api/increaseCounter", aev_json_counter, increase_counter},
+            {"/api/getPolls", aev_json_polls, get_polls}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

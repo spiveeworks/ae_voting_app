@@ -1,4 +1,4 @@
--module(restful).
+-module(aev_json_counter).
 -behavior(cowboy_handler).
 
 -export([init/2, allowed_methods/2]).
