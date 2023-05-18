@@ -10,7 +10,7 @@ start() ->
 start(_Type, _Args) ->
     Dispatch = cowboy_router:compile([
         {'_', [
-            {"/", hello_handler, []},
+            {"/", cowboy_static, {file, "site/index.html"}},
             {"/api/increaseCounter", restful, increase_counter}
         ]}
     ]),
