@@ -33,6 +33,12 @@ sign_transaction(Priv, TX) ->
     Fields = [{signatures, [Sig]}, {transaction, TX}],
     aeser_chain_objects:serialize(signed_tx, 1, SignedTXTemplate, Fields).
 
+% returns the signature by itself, base58 encoded
+make_transaction_signature_base58(Priv, EncodedTX) ->
+    {transaction, TX} = aeser_api_encoder:decode(EncodedTX),
+    Sig = make_transaction_signature(Priv, TX),
+    aeser_api_encoder:encode(signature, Sig).
+
 sign_transaction_base58(Priv, EncodedTX) ->
     {transaction, TX} = aeser_api_encoder:decode(EncodedTX),
     SignedTX = sign_transaction(Priv, TX),
@@ -75,7 +81,7 @@ create_poll_contract() ->
     Options = #{1 => "option 1", 2 => "option 2"},
     {ok, CreateTX} = contract_man:create_poll(ID, "Test Poll", Description,
                                               "example.com", none, Options,
-                                              100),
+                                              never_closes),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
 
@@ -156,14 +162,42 @@ create_registry_and_poll_parallel() ->
 
     RegistryID.
 
+vote_poll(PollIndex, Option) ->
+    Key = get_key(),
+    ID = Key#keypair.public,
+
+    {ok, TX} = client_ops:vote_tx(ID, PollIndex, Option),
+    Sig = make_transaction_signature_base58(Key#keypair.private, TX),
+    {ok, TH} = client_ops:post_vote_sig(ID, PollIndex, Option, Sig),
+    TH.
+
+vote_poll_wait(PollIndex, Option) ->
+    TH = vote_poll(PollIndex, Option),
+
+    query_man:subscribe_tx_info(self(), "add vote", TH),
+    receive
+        {subscribe_tx, "add vote", _} -> ok
+    end,
+
+    ok.
+
 run_tests() ->
     %adt_test(),
 
     %RegistryID = create_registry_and_poll_parallel(),
     %create_and_add_poll(RegistryID),
 
-    Polls = poll_keeper:get_polls(),
-    io:format("Polls: ~p~n", [Polls]),
+    %RegistryID = poll_keeper:get_registry_address(),
+
+    PollID = 9,
+
+    vote_poll_wait(PollID, 1),
+    {ok, PollAfter1} = poll_keeper:get_poll(PollID),
+    io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter1)]),
+
+    vote_poll_wait(PollID, 2),
+    {ok, PollAfter2} = poll_keeper:get_poll(PollID),
+    io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter2)]),
 
     ok.
 

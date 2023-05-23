@@ -3,7 +3,8 @@
 
 -export([start_link/0]).
 -export([create_registry/1, query_polls_tx/2, query_polls/1, create_poll/7,
-         register_poll/4, query_poll_state/1, query_account_balance/1]).
+         register_poll/4, query_poll_state/1, query_account_balance/1,
+         vote_tx/3]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
 -spec start_link() ->
@@ -36,6 +37,9 @@ query_poll_state(PollID) ->
 
 query_account_balance(ID) ->
     gen_server:call(?MODULE, {query_account_balance, ID}).
+
+vote_tx(ID, PollID, Option) ->
+    gen_server:call(?MODULE, {vote_tx, ID, PollID, Option}).
 
 %%%%%%%%%%%%%%%%%%
 % Implementation
@@ -81,6 +85,9 @@ handle_call({query_poll_state, PollID}, _, State) ->
     {reply, Result, State};
 handle_call({query_account_balance, ID}, _, State) ->
     Result = do_query_account_balance(State, ID),
+    {reply, Result, State};
+handle_call({vote_tx, ID, PollID, Option}, _, State) ->
+    Result = do_vote_tx(State, ID, PollID, Option),
     {reply, Result, State}.
 
 handle_cast(_, State) ->
@@ -120,7 +127,7 @@ do_create_poll(State, ID, Title, Description, Link, SpecRef, Options, Age) ->
                      "spec_ref" => option(SpecRef)},
 
     CloseHeight = case Age of
-                      endless ->
+                      never_closes ->
                           "None";
                       _ ->
                           case vanillae:top_height() of
@@ -168,8 +175,17 @@ do_query_poll_state(State, PollID) ->
             Error
     end.
 
-do_query_account_balance(_State, _ID) ->
-    1.
+do_query_account_balance(_State, ID) ->
+    case vanillae:acc(ID) of
+        {ok, #{"balance" := Balance}} -> {ok, Balance};
+        {error, Reason} -> {error, Reason}
+    end.
+
+do_vote_tx(State, ID, PollID, Option) ->
+    AACI = State#cms.poll_aaci,
+    % FIXME what should this gas amount be? The vote call should have a pretty
+    % consistent gas cost, right?
+    vanillae:contract_call(ID, AACI, PollID, "vote", [Option]).
 
 option(none) -> "None";
 option(A) -> {"Some", A}.
