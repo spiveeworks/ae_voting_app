@@ -13,6 +13,8 @@ start(_Type, _Args) ->
             {"/[polls]", cowboy_static, {file, "site/index.html"}},
             {"/polls/:id", [{id, int}], cowboy_static, {file, "site/show_poll.html"}},
             {"/counter", cowboy_static, {file, "site/counter.html"}},
+            {"/sidekick.js", cowboy_static, {file, "site/sidekick.js"}},
+            {"/sidekick.js.map", cowboy_static, {file, "site/sidekick.js.map"}},
             {"/api/increaseCounter", aev_json_counter, increase_counter},
             {"/api/getPolls", aev_json_polls, get_polls},
             {"/api/poll/:id", [{id, int}], aev_json_polls, get_poll_info}

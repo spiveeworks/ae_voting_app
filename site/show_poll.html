@@ -2,7 +2,102 @@
 <html>
 <body>
 
-<script>
+<script type="module">
+    import * as sk from "../sidekick.js";
+
+    async function form_tx(logger) {
+        // @ts-ignore
+        let recipient_id = document.getElementById('tx-info-target').value;
+        // @ts-ignore
+        let amount       = parseInt(document.getElementById('tx-info-amount').value);
+        let fee          = ae_node.MIN_FEE;
+        let sender_id    = pv_address;
+        let payload      = 'hainana';
+        let spendtx      = {recipient_id : recipient_id,
+                            amount       : amount,
+                            fee          : fee,
+                            sender_id    : sender_id,
+                            payload      : payload};
+        document.getElementById('spendtx-json').innerHTML =
+            JSON.stringify(spendtx, undefined, 4);
+        let tx = await sk.PostSpend(sk.URL_TESTNET, spendtx);
+        // @ts-ignore
+        set_pv_spendtx_base58(tx.tx);
+        //document.getElementById('spendtx-base58').innerHTML =
+        //    JSON.stringify(tx, undefined, 4);
+        //
+    }
+
+    async function sign_tx(logger) {
+        let sign_params = {
+            tx: pv_spendtx_base58,
+            returnSigned: true,
+            networkId: "ae_uat"
+        };
+        let signedTx = await sk.tx_sign_noprop('sk-tx-sign-1', sign_params, sk.TIMEOUT_DEF_TX_SIGN_NOPROP_MS, 'sign transaction timed out', logger);
+        document.getElementById("sign-spendtx-result").innerHTML = JSON.stringify(signedTx, undefined, 4);
+    }
+
+    async function address() {
+        let logger = sk.cl();
+
+        let connect_info = await sk.connect(
+            'ske-connect-1',
+            {name: 'sidekick examples',
+             version: 1},
+            sk.TIMEOUT_DEF_CONNECT_MS,
+            "failed to connect to wallet",
+            logger
+        );
+
+        // try to address to the wallet
+        // will fail on timeout error
+        // console logger
+        let wallet_info = await sk.address(
+            'ske-address-1',
+            {type: 'subscribe',
+             value: 'connected'},
+            sk.TIMEOUT_DEF_ADDRESS_MS,
+            "failed to address to wallet",
+            logger
+        );
+        if (wallet_info.ok) {
+            wallet_info.result = Object.keys(wallet_info.result.address.current)[0];
+        }
+
+        return wallet_info;
+    }
+
+    async function vote(option_id) {
+        let info = await address();
+        console.log(info);
+
+        /*
+        let signature = "";
+        let body = {option_id: option_id};
+        let json = await fetch(
+            window.location.origin + "/api/formVoteTX",
+            {
+                method: "post",
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            }
+        );
+        let object = await json.json();
+        updateText(object.value);
+        */
+    }
+
+    function makeVoteClosure(option_id) {
+        async function it() {
+            vote(option_id);
+        }
+        return it;
+    }
+
     function generateTable(data) {
         let table = document.querySelector("table");
 
@@ -13,6 +108,12 @@
                .appendChild(document.createTextNode(element.name));
             row.insertCell()
                .appendChild(document.createTextNode(element.score));
+
+            let button = document.createElement('button');
+            button.innerText = "Vote";
+            button.onclick = makeVoteClosure(element.id);
+            row.insertCell()
+               .appendChild(button);
         }
 
         // Generate the head AFTER the body, because of course.
@@ -29,12 +130,12 @@
     }
 
     async function updatePolls() {
-        id = getID();
+        let id = getID();
         document.getElementById("title").innerHTML = "Poll " + id;
 
-        response = await fetch(window.location.origin + "/api/poll/" + id);
+        let response = await fetch(window.location.origin + "/api/poll/" + id);
         if (response.ok) {
-            object = await response.json();
+            let object = await response.json();
 
             document.getElementById("title").innerHTML = object.title;
             document.getElementById("description").innerHTML = object.description;
@@ -48,9 +149,9 @@
     }
 
     function getID() {
-        text = document.getElementById("text");
-        path = window.location.pathname.split("/");
-        id_str = path[path.length - 1];
+        let text = document.getElementById("text");
+        let path = window.location.pathname.split("/");
+        let id_str = path[path.length - 1];
         return id_str; // We could convert this to a number, but it only ever gets used to build HTTP request URLs, so there is no need.
     }
 
