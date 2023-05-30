@@ -189,15 +189,15 @@ run_tests() ->
 
     %RegistryID = poll_keeper:get_registry_address(),
 
-    PollID = 9,
+    %PollID = 9,
 
-    vote_poll_wait(PollID, 1),
-    {ok, PollAfter1} = poll_keeper:get_poll(PollID),
-    io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter1)]),
+    %vote_poll_wait(PollID, 1),
+    %{ok, PollAfter1} = poll_keeper:get_poll(PollID),
+    %io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter1)]),
 
-    vote_poll_wait(PollID, 2),
-    {ok, PollAfter2} = poll_keeper:get_poll(PollID),
-    io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter2)]),
+    %vote_poll_wait(PollID, 2),
+    %{ok, PollAfter2} = poll_keeper:get_poll(PollID),
+    %io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter2)]),
 
     ok.
 

@@ -17,7 +17,9 @@ start(_Type, _Args) ->
             {"/sidekick.js.map", cowboy_static, {file, "site/sidekick.js.map"}},
             {"/api/increaseCounter", aev_json_counter, increase_counter},
             {"/api/getPolls", aev_json_polls, get_polls},
-            {"/api/poll/:id", [{id, int}], aev_json_polls, get_poll_info}
+            {"/api/poll/:id", [{id, int}], aev_json_polls, get_poll_info},
+            {"/api/formVoteTX", aev_json_client, form_vote_tx},
+            {"/api/postVoteTX", aev_json_client, post_vote_tx}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

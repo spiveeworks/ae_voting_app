@@ -10,7 +10,7 @@
 %%
 
 -record(poll_vote,
-        {id :: term(),
+        {id :: vanillae:accound_id(),
          weight :: non_neg_integer()}).
 
 -record(poll_option,
@@ -130,7 +130,8 @@ do_add_poll(_Title, _Options, State) ->
     io:print("Warning: do_add_poll is not yet implemented.~n", []),
     State.
 
-do_track_vote(ID, PollIndex, Option, TH, State) ->
+do_track_vote(IDRaw, PollIndex, Option, TH, State) ->
+    ID = unicode:characters_to_list(IDRaw),
     Unit = {{tuple, []}, already_normalized, {tuple, []}},
     query_man:subscribe_tx_result(self(), {track_vote, PollIndex, ID, TH}, Unit, TH),
     Pending = maps:put({PollIndex, ID}, {Option, TH}, State#pks.pending_votes),
@@ -141,6 +142,8 @@ do_track_vote_mined(PollIndex, ID, TH, State) ->
     State2 = State#pks{pending_votes = PendingVotes},
     case maps:find({PollIndex, ID}, State#pks.pending_votes) of
         {ok, {NewOption, TH}} ->
+            % TODO: let update_vote lookup the option itself, using
+            % Poll.voted_option(ID)
             update_vote(PollIndex, ID, NewOption, State2);
         _ ->
             io:format("Warning: Got subscribe_tx for a vote that was already "

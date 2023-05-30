@@ -5,43 +5,8 @@
 <script type="module">
     import * as sk from "../sidekick.js";
 
-    async function form_tx(logger) {
-        // @ts-ignore
-        let recipient_id = document.getElementById('tx-info-target').value;
-        // @ts-ignore
-        let amount       = parseInt(document.getElementById('tx-info-amount').value);
-        let fee          = ae_node.MIN_FEE;
-        let sender_id    = pv_address;
-        let payload      = 'hainana';
-        let spendtx      = {recipient_id : recipient_id,
-                            amount       : amount,
-                            fee          : fee,
-                            sender_id    : sender_id,
-                            payload      : payload};
-        document.getElementById('spendtx-json').innerHTML =
-            JSON.stringify(spendtx, undefined, 4);
-        let tx = await sk.PostSpend(sk.URL_TESTNET, spendtx);
-        // @ts-ignore
-        set_pv_spendtx_base58(tx.tx);
-        //document.getElementById('spendtx-base58').innerHTML =
-        //    JSON.stringify(tx, undefined, 4);
-        //
-    }
-
-    async function sign_tx(logger) {
-        let sign_params = {
-            tx: pv_spendtx_base58,
-            returnSigned: true,
-            networkId: "ae_uat"
-        };
-        let signedTx = await sk.tx_sign_noprop('sk-tx-sign-1', sign_params, sk.TIMEOUT_DEF_TX_SIGN_NOPROP_MS, 'sign transaction timed out', logger);
-        document.getElementById("sign-spendtx-result").innerHTML = JSON.stringify(signedTx, undefined, 4);
-    }
-
-    async function address() {
-        let logger = sk.cl();
-
-        let connect_info = await sk.connect(
+    function connect(logger) {
+        return sk.connect(
             'ske-connect-1',
             {name: 'sidekick examples',
              version: 1},
@@ -49,7 +14,18 @@
             "failed to connect to wallet",
             logger
         );
+    }
 
+    function sign_tx(logger, tx) {
+        let sign_params = {
+            tx: tx,
+            returnSigned: true,
+            networkId: "ae_uat"
+        };
+        return sk.tx_sign_noprop('sk-tx-sign-1', sign_params, sk.TIMEOUT_DEF_TX_SIGN_NOPROP_MS, 'sign transaction timed out', logger);
+    }
+
+    async function address(logger) {
         // try to address to the wallet
         // will fail on timeout error
         // console logger
@@ -68,15 +44,9 @@
         return wallet_info;
     }
 
-    async function vote(option_id) {
-        let info = await address();
-        console.log(info);
-
-        /*
-        let signature = "";
-        let body = {option_id: option_id};
-        let json = await fetch(
-            window.location.origin + "/api/formVoteTX",
+    async function post_json(url, body) {
+        let response = await fetch(
+            window.location.origin + url,
             {
                 method: "post",
                 headers: {
@@ -86,9 +56,57 @@
                 body: JSON.stringify(body)
             }
         );
-        let object = await json.json();
-        updateText(object.value);
-        */
+
+        if (response.ok) {
+            let body = await response.json();
+            return {ok: true, body: body};
+        } else {
+            return response;
+        }
+    }
+
+    async function vote(option_id) {
+        let logger = sk.cl();
+
+        let poll_id = Number(getID());
+
+        // connect
+        let connect_info = await connect(logger);
+        if (!connect_info.ok) return;
+
+        // get wallet address
+        // TODO: do this as a "login" function, before even showing buttons
+        let info = await address(logger);
+        if (!info.ok) return;
+
+        // form tx
+
+        let tx_req_body = {
+            poll_id: poll_id,
+            option_id: option_id,
+            address: info.result
+        };
+        let tx_resp = await post_json("/api/formVoteTX", tx_req_body);
+        if (!tx_resp.ok) return;
+
+        let tx = tx_resp.body.tx;
+
+        // sign tx
+        let signed_result = await sign_tx(logger, tx);
+        if (!signed_result.ok) return;
+
+        let signed_tx = signed_result.result.signedTransaction;
+
+        // post tx
+        let post_req_body = {
+            poll_id: poll_id,
+            option_id: option_id,
+            address: info.result,
+            signed_tx: signed_tx
+        };
+        let post_resp = await post_json("/api/postVoteTX", post_req_body);
+
+        // TODO: show pending vote? option currently voted for? revoke button?
     }
 
     function makeVoteClosure(option_id) {
