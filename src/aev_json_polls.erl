@@ -59,12 +59,8 @@ add_score(ID, {poll_option, Name, _, Tally}, Acc) ->
     Option = #{id => ID, name => Name, score => Tally},
     [Option | Acc].
 
-order_options(#{score := ScoreA, id := IDA}, #{score := ScoreB, id := IDB}) ->
-    if
-        ScoreA <  ScoreB -> false;
-        ScoreA == ScoreB -> IDA =< IDB;
-        ScoreA >  ScoreB -> true
-    end.
+order_options(#{id := IDA}, #{id := IDB}) ->
+    IDA =< IDB.
 
 order_polls(#{id := IDA}, #{id := IDB}) ->
     IDA >= IDB.
