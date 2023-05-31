@@ -195,7 +195,7 @@ run_tests() ->
     %{ok, PollAfter1} = poll_keeper:get_poll(PollID),
     %io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter1)]),
 
-    %vote_poll_wait(PollID, 2),
+    %vote_poll_wait(PollID, revoke),
     %{ok, PollAfter2} = poll_keeper:get_poll(PollID),
     %io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter2)]),
 

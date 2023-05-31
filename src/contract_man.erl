@@ -181,6 +181,11 @@ do_query_account_balance(_State, ID) ->
         {error, Reason} -> {error, Reason}
     end.
 
+do_vote_tx(State, ID, PollID, revoke) ->
+    AACI = State#cms.poll_aaci,
+    % FIXME what should this gas amount be? The vote call should have a pretty
+    % consistent gas cost, right?
+    vanillae:contract_call(ID, AACI, PollID, "revoke_vote", []);
 do_vote_tx(State, ID, PollID, Option) ->
     AACI = State#cms.poll_aaci,
     % FIXME what should this gas amount be? The vote call should have a pretty
