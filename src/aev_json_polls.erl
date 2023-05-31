@@ -23,7 +23,14 @@ resource_exists(Req, get_poll_info) ->
      PollID = cowboy_req:binding(id, Req),
      case poll_keeper:get_poll(PollID) of
          {ok, Poll} -> {true, Req, {get_poll_info, PollID, Poll}};
-         {error, not_found} -> {false, Req, {get_poll_info, #{}}}
+         {error, not_found} -> {false, Req, get_poll_info}
+     end;
+resource_exists(Req, get_user_status) ->
+     PollID = cowboy_req:binding(poll, Req),
+     UserID = cowboy_req:binding(user, Req),
+     case poll_keeper:get_user_status(PollID, UserID) of
+         {ok, Current, Pending} -> {true, Req, {get_user_status, PollID, UserID, Current, Pending}};
+         {error, not_found} -> {false, Req, get_user_status}
      end.
 
 to_json(Req, State) ->
@@ -31,7 +38,9 @@ to_json(Req, State) ->
                get_polls ->
                    encode_polls();
                {get_poll_info, PollID, Poll} ->
-                   encode_poll_info(PollID, Poll)
+                   encode_poll_info(PollID, Poll);
+               {get_user_status, PollID, UserID, Current, Pending} ->
+                   encode_user_status(PollID, UserID, Current, Pending)
            end,
     {Data, Req, State}.
 
@@ -76,4 +85,8 @@ encode_poll_info(PollID, Poll) ->
                 url => URL,
                 close_height => CloseHeight,
                 options => Options}).
+
+encode_user_status(_PollID, _UserID, Current, Pending) ->
+    zj:encode(#{current_vote => Current,
+                pending_vote => Pending}).
 

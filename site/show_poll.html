@@ -5,6 +5,9 @@
 <script type="module">
     import * as sk from "../sidekick.js";
 
+    var logged_in = false;
+    var address;
+
     function connect(logger) {
         return sk.connect(
             'ske-connect-1',
@@ -25,10 +28,10 @@
         return sk.tx_sign_noprop('sk-tx-sign-1', sign_params, sk.TIMEOUT_DEF_TX_SIGN_NOPROP_MS, 'sign transaction timed out', logger);
     }
 
-    async function address(logger) {
-        // try to address to the wallet
-        // will fail on timeout error
-        // console logger
+    async function login() {
+        let logger = sk.cl();
+
+        await connect(logger);
         let wallet_info = await sk.address(
             'ske-address-1',
             {type: 'subscribe',
@@ -37,16 +40,52 @@
             "failed to address to wallet",
             logger
         );
-        if (wallet_info.ok) {
-            wallet_info.result = Object.keys(wallet_info.result.address.current)[0];
-        }
+        if (!wallet_info.ok) return;
 
-        return wallet_info;
+        let maybe_address = Object.keys(wallet_info.result.address.current)[0];
+        if (maybe_address === undefined) return;
+
+        address = maybe_address;
+        logged_in = true;
+        document.getElementById("login_status").innerHTML = "Viewing as " + address;
+        document.getElementById("login_button").innerText = "Change account";
+
+        let status_response = await fetch("/api/poll/" + getID() + "/user/" + address);
+        if (!status_response.ok) return;
+        let vote_status = await status_response.json();
+        let current = vote_status.current_vote;
+        let pending = vote_status.pending_vote;
+
+        if (pending == "none") {
+            let rows = document.querySelector("table").tBodies[0].rows;
+            for (let row of rows) {
+                let button = row.cells[2].children[0];
+                let option_id = Number(row.id.slice(6)); // Lord forgive me.
+                if (row.id == "option" + current) {
+                    button.innerText = "Revoke";
+                    button.onclick = revoke;
+                } else {
+                    button.innerText = "Vote";
+                    button.onclick = makeVoteClosure(option_id);
+                }
+            }
+        } else {
+            setButtonsPending();
+        }
+    }
+
+    function setButtonsPending() {
+        let rows = document.querySelector("table").tBodies[0].rows;
+        for (let row of rows) {
+            let button = row.cells[2].children[0];
+            button.innerText = "Pending...";
+            button.onclick = null;
+        }
     }
 
     async function post_json(url, body) {
         let response = await fetch(
-            window.location.origin + url,
+            url,
             {
                 method: "post",
                 headers: {
@@ -66,25 +105,18 @@
     }
 
     async function vote(option_id) {
+        if (!logged_in) return;
+
         let logger = sk.cl();
 
         let poll_id = Number(getID());
-
-        // connect
-        let connect_info = await connect(logger);
-        if (!connect_info.ok) return;
-
-        // get wallet address
-        // TODO: do this as a "login" function, before even showing buttons
-        let info = await address(logger);
-        if (!info.ok) return;
 
         // form tx
 
         let tx_req_body = {
             poll_id: poll_id,
             option_id: option_id,
-            address: info.result
+            address: address
         };
         let tx_resp = await post_json("/api/formVoteTX", tx_req_body);
         if (!tx_resp.ok) return;
@@ -101,17 +133,52 @@
         let post_req_body = {
             poll_id: poll_id,
             option_id: option_id,
-            address: info.result,
+            address: address,
             signed_tx: signed_tx
         };
         let post_resp = await post_json("/api/postVoteTX", post_req_body);
 
-        // TODO: show pending vote? option currently voted for? revoke button?
+        if (post_resp.ok) setButtonsPending();
+    }
+
+    async function revoke() {
+        if (!logged_in) return;
+
+        let logger = sk.cl();
+
+        let poll_id = Number(getID());
+
+        // form tx
+
+        let tx_req_body = {
+            poll_id: poll_id,
+            address: address
+        };
+        let tx_resp = await post_json("/api/formRevokeVoteTX", tx_req_body);
+        if (!tx_resp.ok) return;
+
+        let tx = tx_resp.body.tx;
+
+        // sign tx
+        let signed_result = await sign_tx(logger, tx);
+        if (!signed_result.ok) return;
+
+        let signed_tx = signed_result.result.signedTransaction;
+
+        // post tx
+        let post_req_body = {
+            poll_id: poll_id,
+            address: address,
+            signed_tx: signed_tx
+        };
+        let post_resp = await post_json("/api/postRevokeVoteTX", post_req_body);
+
+        if (post_resp.ok) setButtonsPending();
     }
 
     function makeVoteClosure(option_id) {
-        async function it() {
-            vote(option_id);
+        function it() {
+            return vote(option_id);
         }
         return it;
     }
@@ -121,6 +188,7 @@
 
         for (let element of data) {
             let row = table.insertRow();
+            row.id = "option" + element.id;
 
             row.insertCell()
                .appendChild(document.createTextNode(element.name));
@@ -148,10 +216,14 @@
     }
 
     async function updatePolls() {
+        let login_button = document.getElementById("login_button");
+        login_button.innerText = "Select account";
+        login_button.addEventListener("click", login, false);
+
         let id = getID();
         document.getElementById("title").innerHTML = "Poll " + id;
 
-        let response = await fetch(window.location.origin + "/api/poll/" + id);
+        let response = await fetch("/api/poll/" + id);
         if (response.ok) {
             let object = await response.json();
 
@@ -176,6 +248,10 @@
     window.onload = updatePolls;
     //setInterval(updateCounter, 1000);
 </script>
+
+<p id="login_status">No account selected.</p>
+
+<button id="login_button">Loading...</button>
 
 <h1 id="title"></h1>
 

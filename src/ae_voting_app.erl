@@ -18,8 +18,12 @@ start(_Type, _Args) ->
             {"/api/increaseCounter", aev_json_counter, increase_counter},
             {"/api/getPolls", aev_json_polls, get_polls},
             {"/api/poll/:id", [{id, int}], aev_json_polls, get_poll_info},
+            {"/api/poll/:poll/user/:user", [{poll, int}], aev_json_polls, get_user_status},
+            % TODO: Should these be in /api/poll/:poll as well?
             {"/api/formVoteTX", aev_json_client, form_vote_tx},
-            {"/api/postVoteTX", aev_json_client, post_vote_tx}
+            {"/api/postVoteTX", aev_json_client, post_vote_tx},
+            {"/api/formRevokeVoteTX", aev_json_client, form_revoke_vote_tx},
+            {"/api/postRevokeVoteTX", aev_json_client, post_revoke_vote_tx}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

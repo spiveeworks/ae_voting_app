@@ -25,7 +25,11 @@ content_types_accepted(Req, State) ->
 handle_post(Req, State = form_vote_tx) ->
     form_vote_tx(Req, State);
 handle_post(Req, State = post_vote_tx) ->
-    post_vote_tx(Req, State).
+    post_vote_tx(Req, State);
+handle_post(Req, State = form_revoke_vote_tx) ->
+    form_revoke_vote_tx(Req, State);
+handle_post(Req, State = post_revoke_vote_tx) ->
+    post_revoke_vote_tx(Req, State).
 
 form_vote_tx(Req0, State) ->
     case aev_json_parse:parse_req_body(Req0) of
@@ -33,6 +37,19 @@ form_vote_tx(Req0, State) ->
                <<"option_id">> := Option,
                <<"address">> := ID}, Req1} ->
             form_vote_tx2(Req1, State, ID, Poll, Option);
+        {ok, Body, Req1} ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            {false, Req1, State};
+        {error, Req1} ->
+            io:format("Failure.~n", []),
+            {false, Req1, State}
+    end.
+
+form_revoke_vote_tx(Req0, State) ->
+    case aev_json_parse:parse_req_body(Req0) of
+        {ok, #{<<"poll_id">> := Poll,
+               <<"address">> := ID}, Req1} ->
+            form_vote_tx2(Req1, State, ID, Poll, revoke);
         {ok, Body, Req1} ->
             io:format("Invalid data received: ~p~n", [Body]),
             {false, Req1, State};
@@ -58,6 +75,21 @@ post_vote_tx(Req0, State) ->
                <<"address">> := ID,
                <<"signed_tx">> := SignedTX}, Req1} ->
             post_vote_tx2(Req1, State, ID, Poll, Option, SignedTX);
+        {ok, Body, Req1} ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            {false, Req1, State};
+        {error, Req1} ->
+            io:format("Failure.~n", []),
+            {false, Req1, State}
+    end.
+
+post_revoke_vote_tx(Req0, State) ->
+    case aev_json_parse:parse_req_body(Req0) of
+        {ok, #{<<"poll_id">> := Poll,
+               <<"address">> := ID,
+               <<"signed_tx">> := SignedTX}, Req1} ->
+            io:format("Revoking vote...~n", []),
+            post_vote_tx2(Req1, State, ID, Poll, revoke, SignedTX);
         {ok, Body, Req1} ->
             io:format("Invalid data received: ~p~n", [Body]),
             {false, Req1, State};

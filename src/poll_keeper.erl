@@ -2,7 +2,8 @@
 -behaviour(gen_server).
 
 -export([start_link/0, add_poll/2, get_polls/0, get_poll_titles/0, get_poll/1,
-        get_registry_address/0, get_poll_address/1, track_vote/4]).
+        get_user_status/2, get_registry_address/0, get_poll_address/1,
+        track_vote/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 %%
@@ -54,6 +55,9 @@ get_poll_titles() ->
 get_poll(Id) ->
     gen_server:call(?MODULE, {get_poll, Id}).
 
+get_user_status(PollIndex, ID) ->
+    gen_server:call(?MODULE, {get_user_status, PollIndex, ID}).
+
 get_registry_address() ->
     gen_server:call(?MODULE, get_registry_address).
 
@@ -82,6 +86,9 @@ handle_call(get_poll_titles, _, State) ->
 handle_call({get_poll, Id}, _, State) ->
     Options = do_get_poll(Id, State),
     {reply, Options, State};
+handle_call({get_user_status, PollIndex, ID}, _, State) ->
+    Status = do_get_user_status(PollIndex, ID, State),
+    {reply, Status, State};
 handle_call(get_registry_address, _, State) ->
     Result = State#pks.registry_id,
     {reply, Result, State};
@@ -125,6 +132,28 @@ do_get_poll_address(Id, State) ->
         error ->
             {error, not_found}
     end.
+
+do_get_user_status(PollIndex, IDRaw, State) ->
+    ID = unicode:characters_to_list(IDRaw),
+    case maps:find(PollIndex, State#pks.polls) of
+        {ok, Poll} -> do_get_user_status2(PollIndex, Poll, ID, State);
+        error -> {error, not_found}
+    end.
+
+do_get_user_status2(PollIndex, Poll, ID, State) ->
+    Current = case poll_lookup_user(ID, Poll) of
+                  [] -> none;
+                  [OptionIndex] -> OptionIndex;
+                  [OptionIndex | _] ->
+                      io:format("Warning: User ~p has voted for multiple"
+                          "options in poll ~p. Ignoring.~n", [ID, PollIndex]),
+                      OptionIndex
+              end,
+    Pending = case maps:find({PollIndex, ID}, State#pks.pending_votes) of
+                  {ok, {PendingOptionIndex, _}} -> PendingOptionIndex;
+                  error -> none
+              end,
+    {ok, Current, Pending}.
 
 do_add_poll(_Title, _Options, State) ->
     io:print("Warning: do_add_poll is not yet implemented.~n", []),
@@ -250,4 +279,20 @@ votes_remove(ID, [Vote | Remaining], Vs, T) ->
     votes_remove(ID, Remaining, [Vote | Vs], T + Vote#poll_vote.weight);
 votes_remove(_ID, [], Vs, T) ->
     {lists:reverse(Vs), T}.
+
+poll_lookup_user(ID, Poll) ->
+    OptionLookupUser = fun(OID, O, Acc) ->
+                               Votes = O#poll_option.votes,
+                               votes_lookup_user(ID, OID, Votes, Acc)
+                       end,
+    maps:fold(OptionLookupUser, [], Poll#poll.options).
+
+votes_lookup_user(ID, OID, [#poll_vote{id = ID} | Remaining], Acc) ->
+    votes_lookup_user(ID, OID, Remaining, [OID | Acc]);
+votes_lookup_user(ID, OID, [_ | Remaining], Acc) ->
+    votes_lookup_user(ID, OID, Remaining, Acc);
+votes_lookup_user(_ID, _OID, [], Acc) ->
+    % Should be empty or a singleton, so there is no need to reverse.
+    % Also, Acc includes other options, so we better not anyway.
+    Acc.
 
