@@ -11,7 +11,7 @@
 %%
 
 -record(poll_vote,
-        {id :: vanillae:accound_id(),
+        {id :: vanillae:account_id(),
          weight :: non_neg_integer()}).
 
 -record(poll_option,
@@ -22,6 +22,8 @@
 % TODO: add fields for creator, curation status, etc.
 -record(poll,
         {chain_id :: vanillae:contract_id(),
+         creator_id :: vanillae:account_id(),
+         category :: integer(),
          title :: string(),
          description :: string(),
          url = "" :: string(),
@@ -34,7 +36,8 @@
 -record(pks,
         {registry_id :: vanillae:contract_id(),
          polls = #{} :: #{pos_integer() => #poll{}},
-         pending_votes = #{} :: pending_votes()}).
+         pending_votes = #{} :: pending_votes(),
+         filters :: filters:poll_filter_set()}).
 
 %%
 % External Interface
@@ -75,7 +78,9 @@ track_vote(ID, PollIndex, Option, TH) ->
 init({}) ->
     spawn(tests, run_tests, []),
     {ok, [RegistryID]} = file:consult("registry_id"),
-    State = initial_state(RegistryID),
+    {ok, Filters} = filters:load("filters"),
+    State = initial_state(RegistryID, Filters),
+    io:format("Poll keeper created.~n", []),
     {ok, State}.
 
 handle_call(get_polls, _, State) ->
@@ -184,13 +189,16 @@ do_track_vote_mined(PollIndex, ID, TH, State) ->
 % Ground Truth
 %%
 
-initial_state(RegistryID) ->
+initial_state(RegistryID, Filters) ->
     {ok, PollMap} = contract_man:query_polls(RegistryID),
 
-    Polls = maps:map(fun read_poll_from_registry/2, PollMap),
+    ConvertPoll = fun(_Index, PollInfo) ->
+                          read_poll_from_registry(Filters, PollInfo)
+                  end,
+    Polls = maps:map(ConvertPoll, PollMap),
     #pks{registry_id = RegistryID, polls = Polls}.
 
-read_poll_from_registry(_Index, PollInfo) ->
+read_poll_from_registry(Filters, PollInfo) ->
     PollID = maps:get("poll", PollInfo),
 
     % FIXME: People could create any old contract that has a `vote` entrypoint,
@@ -224,7 +232,12 @@ read_poll_from_registry(_Index, PollInfo) ->
               end,
     Options = maps:fold(AddVote, OptionsNoVotes, VotesMap),
 
+    {ok, #{"owner_id" := CreatorID}} = vanillae:contract(PollID),
+    Category = filters:category(Filters, PollID, CreatorID),
+
     #poll{chain_id = PollID,
+          creator_id = CreatorID,
+          category = Category,
           title = Title,
           description = Description,
           url = URL,
