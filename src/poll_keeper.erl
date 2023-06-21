@@ -1,7 +1,7 @@
 -module(poll_keeper).
 -behaviour(gen_server).
 
--export([start_link/0, add_poll/2, get_polls/0, get_poll_titles/0, get_poll/1,
+-export([start_link/0, add_poll/2, get_polls/1, get_poll_titles/0, get_poll/1,
         get_user_status/2, get_registry_address/0, get_poll_address/1,
         track_vote/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
@@ -49,8 +49,8 @@ start_link() ->
 add_poll(Title, Options) ->
     gen_server:cast(?MODULE, {add_poll, Title, Options}).
 
-get_polls() ->
-    gen_server:call(?MODULE, get_polls).
+get_polls(Category) ->
+    gen_server:call(?MODULE, {get_polls, Category}).
 
 get_poll_titles() ->
     gen_server:call(?MODULE, get_poll_titles).
@@ -83,8 +83,9 @@ init({}) ->
     io:format("Poll keeper created.~n", []),
     {ok, State}.
 
-handle_call(get_polls, _, State) ->
-    {reply, State#pks.polls, State};
+handle_call({get_polls, Category}, _, State) ->
+    Polls = do_get_polls(Category, State),
+    {reply, Polls, State};
 handle_call(get_poll_titles, _, State) ->
     Titles = do_get_poll_titles(State#pks.polls),
     {reply, Titles, State};
@@ -118,6 +119,12 @@ handle_info({subscribe_tx, {track_vote, _PollIndex, _ID, _TH}, {error, Reason}},
 %%
 % Doers
 %%
+
+do_get_polls(Category, State) ->
+    Pred = fun(_Id, Poll) ->
+                   Poll#poll.category >= Category
+           end,
+    maps:filter(Pred, State#pks.polls).
 
 do_get_poll_titles(Polls) ->
     maps:fold(fun(_, #poll{title = P}, Ps) -> [P | Ps] end, [], Polls).

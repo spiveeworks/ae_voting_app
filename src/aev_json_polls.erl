@@ -2,7 +2,7 @@
 -behavior(cowboy_handler).
 
 -export([init/2, allowed_methods/2]).
--export([resource_exists/2, content_types_provided/2, to_json/2]).
+-export([resource_exists/2, malformed_request/2, content_types_provided/2, to_json/2]).
 
 init(Req, State) ->
     {cowboy_rest, Req, State}.
@@ -17,8 +17,23 @@ content_types_provided(Req, State) ->
     ],
     {Provided, Req, State}.
 
-resource_exists(Req, get_polls) ->
-    {true, Req, get_polls};
+% parse query string, report whether it succeeded, and store the result.
+malformed_request(Req, get_polls) ->
+    case cowboy_req:parse_qs(Req) of
+        [{<<"category">>, Category}] ->
+            case category_id(Category) of
+                error -> {true, Req, get_polls};
+                {ok, ID} -> {false, Req, {get_polls, ID}}
+            end;
+        [] ->
+            {false, Req, {get_polls, 1}};
+        _ ->
+            {true, Req, get_polls}
+    end;
+malformed_request(Req, State) ->
+    % Nothing else takes a query string, so proceed.
+    {false, Req, State}.
+
 resource_exists(Req, get_poll_info) ->
      PollID = cowboy_req:binding(id, Req),
      case poll_keeper:get_poll(PollID) of
@@ -31,12 +46,16 @@ resource_exists(Req, get_user_status) ->
      case poll_keeper:get_user_status(PollID, UserID) of
          {ok, Current, Pending} -> {true, Req, {get_user_status, PollID, UserID, Current, Pending}};
          {error, not_found} -> {false, Req, get_user_status}
-     end.
+     end;
+resource_exists(Req, State) ->
+    % Everything else is just a static endpoint; assume that since it got
+    % routed at all, it probably exists.
+    {true, Req, State}.
 
 to_json(Req, State) ->
     Data = case State of
-               get_polls ->
-                   encode_polls();
+               {get_polls, Category} ->
+                   encode_polls(Category);
                {get_poll_info, PollID, Poll} ->
                    encode_poll_info(PollID, Poll);
                {get_user_status, PollID, UserID, Current, Pending} ->
@@ -46,15 +65,16 @@ to_json(Req, State) ->
 
 % Encode a list of all polls
 
-encode_polls() ->
-    PollMap = poll_keeper:get_polls(),
+encode_polls(Category) ->
+    PollMap = poll_keeper:get_polls(Category),
     Polls = maps:fold(fun add_poll/3, [], PollMap),
     PollsSorted = lists:sort(fun order_polls/2, Polls),
     zj:encode(#{polls => PollsSorted}).
 
-add_poll(ID, {poll, _, Title, _, _, CloseHeight, OptionMap}, Acc) ->
+add_poll(ID, {poll, _, _, Category, Title, _, _, CloseHeight, OptionMap}, Acc) ->
     Options = format_options(OptionMap),
     Poll = #{id => ID,
+             category => category_name(Category),
              title => Title,
              close_height => CloseHeight,
              scores => Options},
@@ -89,4 +109,17 @@ encode_poll_info(PollID, Poll) ->
 encode_user_status(_PollID, _UserID, Current, Pending) ->
     zj:encode(#{current_vote => Current,
                 pending_vote => Pending}).
+
+% Poll categories
+
+category_name(0) -> "hidden";
+category_name(1) -> "all";
+category_name(2) -> "approved";
+category_name(3) -> "official".
+
+category_id(<<"hidden">>) -> {ok, 0};
+category_id(<<"all">>) -> {ok, 1};
+category_id(<<"approved">>) -> {ok, 2};
+category_id(<<"official">>) -> {ok, 3};
+category_id(_) -> error.
 
