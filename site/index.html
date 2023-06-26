@@ -29,7 +29,7 @@
     }
 
     async function updatePolls() {
-        json = await fetch("/api/getPolls?category=approved");
+        json = await fetch("/api/getPolls" + window.location.search);
         object = await json.json();
         generateTable(object.polls);
     }
@@ -37,6 +37,16 @@
     window.onload = updatePolls;
     //setInterval(updateCounter, 1000);
 </script>
+
+<p>
+Poll categories:
+</p>
+
+<p>
+<a href="/polls?category=all">all</a>
+<a href="/polls?category=approved">approved</a>
+<a href="/polls?category=official">official</a>
+</p>
 
 <table>
 <!-- to be generated client-side --!>
