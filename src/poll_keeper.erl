@@ -3,7 +3,7 @@
 
 -export([start_link/0, add_poll/2, get_polls/1, get_poll_titles/0, get_poll/1,
         get_user_status/2, get_registry_address/0, get_poll_address/1,
-        track_vote/4]).
+        track_vote/4, filter_poll/2, filter_poll_remove/1, filter_user/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 %%
@@ -70,6 +70,15 @@ get_poll_address(Id) ->
 track_vote(ID, PollIndex, Option, TH) ->
     gen_server:cast(?MODULE, {track_vote, ID, PollIndex, Option, TH}).
 
+filter_poll(PollIndex, Category) ->
+    gen_server:cast(?MODULE, {filter_poll, PollIndex, Category}).
+
+filter_poll_remove(PollIndex) ->
+    gen_server:cast(?MODULE, {filter_poll_remove, PollIndex}).
+
+filter_user(ID, Category) ->
+    gen_server:cast(?MODULE, {filter_user, ID, Category}).
+
 
 %%
 % Callbacks
@@ -107,6 +116,15 @@ handle_cast({add_poll, Title, Options}, State) ->
     {noreply, NewState};
 handle_cast({track_vote, ID, PollIndex, Option, TH}, State) ->
     NewState = do_track_vote(ID, PollIndex, Option, TH, State),
+    {noreply, NewState};
+handle_cast({filter_poll, PollIndex, Category}, State) ->
+    NewState = do_filter_poll(PollIndex, Category, State),
+    {noreply, NewState};
+handle_cast({filter_poll_remove, PollIndex}, State) ->
+    NewState = do_filter_poll_remove(PollIndex, State),
+    {noreply, NewState};
+handle_cast({filter_user, ID, Category}, State) ->
+    NewState = do_filter_user(ID, Category, State),
     {noreply, NewState}.
 
 handle_info({subscribe_tx, {track_vote, PollIndex, ID, TH}, {ok, {}}}, State) ->
@@ -192,6 +210,51 @@ do_track_vote_mined(PollIndex, ID, TH, State) ->
             State2
     end.
 
+do_filter_poll(PollIndex, Category, State) ->
+    case maps:find(PollIndex, State#pks.polls) of
+        {ok, Poll} ->
+            % add the filter
+            NewFilters = filters:set_contract_category(State#pks.filters, Poll#poll.chain_id, Category),
+            filters:store(NewFilters, "filters"),
+            % build the new state
+            NewPollState = Poll#poll{category = Category},
+            NewPolls = maps:put(PollIndex, NewPollState, State#pks.polls),
+            State#pks{polls = NewPolls, filters = NewFilters};
+        error ->
+            State
+    end.
+
+do_filter_poll_remove(PollIndex, State) ->
+    case maps:find(PollIndex, State#pks.polls) of
+        {ok, Poll} ->
+            % remove the filter
+            NewFilters = filters:reset_contract_category(State#pks.filters, Poll#poll.chain_id),
+            filters:store(NewFilters, "filters"),
+            % work out what the category is now
+            Category = filters:category(NewFilters, Poll#poll.chain_id, Poll#poll.creator_id),
+            % build the new state
+            NewPollState = Poll#poll{category = Category},
+            NewPolls = maps:put(PollIndex, NewPollState, State#pks.polls),
+            State#pks{polls = NewPolls, filters = NewFilters};
+        error ->
+            State
+    end.
+
+do_filter_user(ID, Category, State) ->
+    % add the filter
+    NewFilters = filters:set_account_category(State#pks.filters, ID, Category),
+    filters:store(NewFilters, "filters"),
+    % build the new state
+    UpdateCategory = fun(_, Poll) ->
+                             NewCategory = filters:category(NewFilters,
+                                                            Poll#poll.chain_id,
+                                                            Poll#poll.creator_id),
+                             Poll#poll{category = NewCategory}
+                     end,
+    NewPolls = maps:map(UpdateCategory, State#pks.polls),
+    State#pks{filters = NewFilters, polls = NewPolls}.
+
+
 %%
 % Ground Truth
 %%
@@ -203,7 +266,7 @@ initial_state(RegistryID, Filters) ->
                           read_poll_from_registry(Filters, PollInfo)
                   end,
     Polls = maps:map(ConvertPoll, PollMap),
-    #pks{registry_id = RegistryID, polls = Polls}.
+    #pks{registry_id = RegistryID, polls = Polls, filters = Filters}.
 
 read_poll_from_registry(Filters, PollInfo) ->
     PollID = maps:get("poll", PollInfo),
