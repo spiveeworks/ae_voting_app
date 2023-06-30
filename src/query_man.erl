@@ -47,7 +47,7 @@ post_tx_contract(PID, Label, TX) ->
 %%%%%%%%%%%%%%%%%%
 % Implementation
 
--record(query, {block_until :: timer:tref()}).
+-record(query, {block_until :: reference()}).
 
 -record(sub, {pid :: pid(),
               label = no_label :: {label, term()},
