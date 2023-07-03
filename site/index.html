@@ -9,8 +9,14 @@
         for (let element of data) {
             let row = table.insertRow();
 
-            row.insertCell()
-               .appendChild(document.createTextNode(element.title));
+            let a = document.createElement('a');
+            a.href = "/polls/" + element.id;
+            a.title = "Poll " + element.id + ": " + element.title;
+            a.appendChild(document.createTextNode(element.title));
+
+            let title_cell = row.insertCell();
+            title_cell.appendChild(document.createTextNode("" + element.id + ": "));
+            title_cell.appendChild(a);
             row.insertCell()
                .appendChild(document.createTextNode(element.close_height));
         }

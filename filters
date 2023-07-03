@@ -1,5 +1,2 @@
-#{account_filters =>
-      #{"ak_zHn9n6XYdjg22P8hJ4J1k5gr729DHZMfKqRhEbgEbV4q9rDod" => 2},
-  contract_filters =>
-      #{"ct_2BrpZY6dS1LhNyPim3UtkSV59YVhshWnbjqeBoRq4BkcC1Q6tA" => 0,
-        "ct_2ZCy5Mj1eA32drxiV2p5v8Z62QmApYudw6yvSFVh4bz35cC8FW" => 1}}.
+#{account_filters => #{},
+  contract_filters => #{}}.

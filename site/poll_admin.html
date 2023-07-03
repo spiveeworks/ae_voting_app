@@ -206,8 +206,9 @@
         for (let element of data) {
             let row = table.insertRow();
 
+            // Add a column for the poll id
             row.insertCell()
-               .appendChild(document.createTextNode(element.title));
+               .appendChild(document.createTextNode("" + element.id + ": " + element.title));
             row.insertCell()
                .appendChild(document.createTextNode(element.close_height));
 
