@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<script type="module">
+    import * as sk from "../sidekick.js";
+
+    // account selection 'login' stuff
+    var logged_in = false;
+    var address;
+
+    // cache of poll categories
+    var categories = {};
+    window.categories = categories;
+
+    function connect(logger) {
+        return sk.connect(
+            'ske-connect-1',
+            {name: 'sidekick examples',
+             version: 1},
+            sk.TIMEOUT_DEF_CONNECT_MS,
+            "failed to connect to wallet",
+            logger
+        );
+    }
+
+    function sign_tx(logger, tx) {
+        let sign_params = {
+            tx: tx,
+            returnSigned: true,
+            networkId: "ae_uat"
+        };
+        return sk.tx_sign_noprop('sk-tx-sign-1', sign_params, sk.TIMEOUT_DEF_TX_SIGN_NOPROP_MS, 'sign transaction timed out', logger);
+    }
+
+    // This is the first half of login() from show_poll.html - factor these?
+    async function login() {
+        let logger = sk.cl();
+
+        await connect(logger);
+        let wallet_info = await sk.address(
+            'ske-address-1',
+            {type: 'subscribe',
+             value: 'connected'},
+            sk.TIMEOUT_DEF_ADDRESS_MS,
+            "failed to address to wallet",
+            logger
+        );
+        if (!wallet_info.ok) return;
+
+        let maybe_address = Object.keys(wallet_info.result.address.current)[0];
+        if (maybe_address === undefined) return;
+
+        address = maybe_address;
+        logged_in = true;
+        document.getElementById("login_status").innerHTML = "Viewing as " + address;
+        document.getElementById("login_button").innerText = "Change account";
+    }
+
+    // this also appears in show_poll.html - util module?
+    async function post_json(url, body) {
+        let response = await fetch(
+            url,
+            {
+                method: "post",
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            }
+        );
+
+        if (response.ok) {
+            let body = await response.json();
+            return {ok: true, body: body};
+        } else {
+            return response;
+        }
+    }
+
+    function sign_message(logger, message) {
+        let promise = sk.msg_sign(
+            'ske-msg_sign-1',
+            address,
+            message,
+            sk.TIMEOUT_DEF_MSG_SIGN_MS,
+            'sign message timed out',
+            logger
+        );
+
+        return promise;
+    }
+
+    // this is probably pretty redundant with vote and revoke in
+    // show_poll.html, might want to look and see what can be factored there,
+    // if anything.
+    async function updateCategory(poll_id, category) {
+        if (!logged_in) return false;
+
+        let logger = sk.cl();
+
+        // message formation
+
+        let action_req_body = {
+            poll_id: poll_id,
+            category: category,
+            address: address
+        };
+        let action_resp = await post_json("/api/setPollCategory/formMsg", action_req_body);
+        if (!action_resp.ok) return false;
+
+        let ts = action_resp.body.timestamp;
+        let nonce = action_resp.body.nonce;
+        let message = action_resp.body.message;
+
+        // sign message
+
+        let sign_result = await sign_message(logger, message);
+        if (!sign_result.ok) return false;
+
+        let signature = sign_result.result.signature;
+
+        // submit signature
+
+        let submit_req_body = {
+            poll_id: poll_id,
+            category: category,
+            address: address,
+            timestamp: ts,
+            nonce: nonce,
+            message_signature: signature
+        };
+        let submit_resp = await post_json("/api/setPollCategory/submitSig", submit_req_body);
+
+        return submit_resp.ok;
+    }
+
+    function createDropdown(poll_index, selected, out_node) {
+        let menu = document.createElement("select");
+
+        let op1 = document.createElement("option");
+        op1.text = "official";
+        menu.add(op1);
+
+        let op2 = document.createElement("option");
+        op2.text = "approved";
+        menu.add(op2);
+
+        let op3 = document.createElement("option");
+        op3.text = "all";
+        menu.add(op3);
+
+        let op4 = document.createElement("option");
+        op4.text = "hidden";
+        menu.add(op4);
+
+        for (var i = 0; i < menu.options.length; i++) {
+            if (menu.options[i].text == selected) {
+                menu.selectedIndex = i;
+            }
+        }
+
+        let button = document.createElement("button");
+        button.innerText = "update";
+        button.disabled = true;
+
+        menu.onchange = makeDropdownClosure(poll_index, menu, button);
+        button.onclick = makeButtonClosure(poll_index, menu, button, out_node);
+
+        return [menu, button];
+    }
+
+    function makeDropdownClosure(poll_index, menu, button) {
+        function f() {
+            const choice = menu.options[menu.selectedIndex].text;
+            const actual = categories[poll_index];
+            // Grey out button if the selected choice already matches what the
+            // server last told us the category is.
+            button.disabled = choice == actual;
+        }
+        return f;
+    }
+
+    function makeButtonClosure(poll_index, menu, button, out_node) {
+        async function f() {
+            const category = menu.options[menu.selectedIndex].text;
+            let success = await updateCategory(poll_index, category);
+            if (success) {
+                categories[poll_index] = category;
+                out_node.textContent = category;
+                // similar to the onchange action created by
+                // makeDropdownClosure, but this time based on the selected
+                // category, and a previous selected category, which is now the
+                // actual category server-side.
+                const selected_now = menu.options[menu.selectedIndex].text;
+                button.disabled = selected_now == category;
+            }
+        }
+        return f;
+    }
+
+    function generateTable(data) {
+        let table = document.querySelector("table");
+
+        for (let element of data) {
+            let row = table.insertRow();
+
+            row.insertCell()
+               .appendChild(document.createTextNode(element.title));
+            row.insertCell()
+               .appendChild(document.createTextNode(element.close_height));
+
+            let category_text_node = document.createTextNode(element.category);
+            row.insertCell()
+               .appendChild(category_text_node);
+
+            let [menu, button] = createDropdown(element.id, element.category,
+                                                category_text_node);
+            row.insertCell()
+               .appendChild(menu);
+            row.insertCell()
+               .appendChild(button);
+
+            categories[element.id] = element.category;
+        }
+
+        // Generate the head AFTER the body, because of course.
+        let thead = table.createTHead();
+        let row = thead.insertRow();
+
+        let th1 = document.createElement("th");
+        th1.appendChild(document.createTextNode("Poll"));
+        row.appendChild(th1);
+
+        let th2 = document.createElement("th");
+        th2.appendChild(document.createTextNode("Close Height"));
+        row.appendChild(th2);
+
+        let th3 = document.createElement("th");
+        th3.appendChild(document.createTextNode("Category"));
+        row.appendChild(th3);
+    }
+
+    async function updatePolls() {
+        let login_button = document.getElementById("login_button");
+        login_button.innerText = "Select account";
+        login_button.onclick = login;
+
+        let json = await fetch("/api/getPolls?category=hidden");
+        let obj = await json.json();
+        generateTable(obj.polls);
+    }
+
+    window.onload = updatePolls;
+    //setInterval(updateCounter, 1000);
+</script>
+
+<p id="login_status">No account selected.</p>
+
+<button id="login_button">Loading...</button>
+
+<table>
+<!-- to be generated client-side --!>
+</table>
+
+</body>
+</html>
+

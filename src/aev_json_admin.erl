@@ -64,12 +64,26 @@ filter_poll(Req0, State) ->
             {false, Req1, State}
     end.
 
-filter_poll2(Req0, State, Poll, Category, ID, Timestamp, Nonce, Signature) ->
-    Message = filter_poll_payload(Poll, Category),
-    case auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
+% TODO: we could combine these commands together a little, since they are quite
+%       redundant
+% TODO: we could move this stuff over to admin_ops.erl once all the pieces have
+%       been decoded
+filter_poll2(Req0, State, Poll, CategoryName, ID, Timestamp, Nonce, Signature) ->
+    case aev_category_names:to_id(CategoryName) of
+        {ok, Category} ->
+            filter_poll3(Req0, State, Poll, CategoryName, Category, ID,
+                         Timestamp, Nonce, Signature);
+        error ->
+            {false, Req0, State}
+    end.
+
+filter_poll3(Req0, State, Poll, CategoryName, Category, ID, Timestamp, Nonce, Signature) ->
+    Message = filter_poll_payload(Poll, CategoryName),
+    case aev_auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
         ok ->
             poll_keeper:filter_poll(Poll, Category),
-            {true, Req0, State};
+            Req1 = cowboy_req:set_resp_body("{}", Req0),
+            {true, Req1, State};
         error ->
             {false, Req0, State}
     end.
@@ -80,19 +94,20 @@ filter_user(Req, State) ->
     {false, Req, State}.
 
 reply_message(Req0, State, Payload, ID) ->
-    {ok, Timestamp, Nonce, Message} = auth:form_message(Payload, ID, ttl()),
+    {ok, Timestamp, Nonce, Message} = aev_auth:start_auth(Payload, ID, ttl()),
     Data = zj:encode(#{timestamp => Timestamp, nonce => Nonce, message => Message}),
     Req1 = cowboy_req:set_resp_body(Data, Req0),
     {true, Req1, State}.
 
 filter_poll_payload(PollIndex, Category) ->
-    PollID = poll_keeper:get_poll_address(PollIndex),
+    {ok, PollID} = poll_keeper:get_poll_address(PollIndex),
     % There might be a slight risk that two different poll sites will give the
     % same nonce for the same poll address, and that the user will categorise a
     % poll on one site, and that signature gets used to sign a transaction on a
     % different site??? But that's not a big deal when we are just filtering
     % polls, lol.
-    io_lib:format("set poll category of ~p to ~p", [PollID, Category]).
+    Txt = io_lib:format("set poll category of ~s to ~s", [PollID, Category]),
+    unicode:characters_to_list(Txt).
 
 ttl() ->
     60000.

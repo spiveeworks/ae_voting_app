@@ -218,7 +218,7 @@
     async function updatePolls() {
         let login_button = document.getElementById("login_button");
         login_button.innerText = "Select account";
-        login_button.addEventListener("click", login, false);
+        login_button.onclick = login;
 
         let id = getID();
         document.getElementById("title").innerHTML = "Poll " + id;

@@ -12,6 +12,7 @@ start(_Type, _Args) ->
         {'_', [
             {"/[polls]", cowboy_static, {file, "site/index.html"}},
             {"/polls/:id", [{id, int}], cowboy_static, {file, "site/show_poll.html"}},
+            {"/polls/admin", cowboy_static, {file, "site/poll_admin.html"}},
             {"/counter", cowboy_static, {file, "site/counter.html"}},
             {"/sidekick.js", cowboy_static, {file, "site/sidekick.js"}},
             {"/sidekick.js.map", cowboy_static, {file, "site/sidekick.js.map"}},
@@ -23,7 +24,9 @@ start(_Type, _Args) ->
             {"/api/formVoteTX", aev_json_client, form_vote_tx},
             {"/api/postVoteTX", aev_json_client, post_vote_tx},
             {"/api/formRevokeVoteTX", aev_json_client, form_revoke_vote_tx},
-            {"/api/postRevokeVoteTX", aev_json_client, post_revoke_vote_tx}
+            {"/api/postRevokeVoteTX", aev_json_client, post_revoke_vote_tx},
+            {"/api/setPollCategory/formMsg", aev_json_admin, filter_poll_form_message},
+            {"/api/setPollCategory/submitSig", aev_json_admin, filter_poll}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

@@ -21,7 +21,7 @@ content_types_provided(Req, State) ->
 malformed_request(Req, get_polls) ->
     case cowboy_req:parse_qs(Req) of
         [{<<"category">>, Category}] ->
-            case category_id(Category) of
+            case aev_category_names:to_id(Category) of
                 error -> {true, Req, get_polls};
                 {ok, ID} -> {false, Req, {get_polls, ID}}
             end;
@@ -74,7 +74,7 @@ encode_polls(Category) ->
 add_poll(ID, {poll, _, _, Category, Title, _, _, CloseHeight, OptionMap}, Acc) ->
     Options = format_options(OptionMap),
     Poll = #{id => ID,
-             category => category_name(Category),
+             category => aev_category_names:from_id(Category),
              title => Title,
              close_height => CloseHeight,
              scores => Options},
@@ -97,7 +97,7 @@ order_polls(#{id := IDA}, #{id := IDB}) ->
 % Encode info about one poll
 
 encode_poll_info(PollID, Poll) ->
-    {poll, _, Title, Description, URL, CloseHeight, OptionMap} = Poll,
+    {poll, _, _, _, Title, Description, URL, CloseHeight, OptionMap} = Poll,
     Options = format_options(OptionMap),
     zj:encode(#{id => PollID,
                 title => Title,
@@ -109,17 +109,4 @@ encode_poll_info(PollID, Poll) ->
 encode_user_status(_PollID, _UserID, Current, Pending) ->
     zj:encode(#{current_vote => Current,
                 pending_vote => Pending}).
-
-% Poll categories
-
-category_name(0) -> "hidden";
-category_name(1) -> "all";
-category_name(2) -> "approved";
-category_name(3) -> "official".
-
-category_id(<<"hidden">>) -> {ok, 0};
-category_id(<<"all">>) -> {ok, 1};
-category_id(<<"approved">>) -> {ok, 2};
-category_id(<<"official">>) -> {ok, 3};
-category_id(_) -> error.
 

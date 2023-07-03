@@ -26,6 +26,11 @@ init([]) ->
         #{
             id => poll_keeper,
             start => {poll_keeper, start_link, []}
+        },
+
+        #{
+            id => aev_auth,
+            start => {aev_auth, start_link, []}
         }
     ],
     {ok, {{one_for_one, 1, 5}, Procs}}.
