@@ -220,7 +220,7 @@ do_filter_poll(PollIndex, Category, State) ->
     case maps:find(PollIndex, State#pks.polls) of
         {ok, Poll} ->
             % add the filter
-            NewFilters = filters:set_contract_category(State#pks.filters, Poll#poll.chain_id, Category),
+            NewFilters = filters:set_contract_category(State#pks.filters, PollIndex, Category),
             filters:store(NewFilters, "filters"),
             % build the new state
             NewPollState = Poll#poll{category = Category},
@@ -234,10 +234,10 @@ do_filter_poll_remove(PollIndex, State) ->
     case maps:find(PollIndex, State#pks.polls) of
         {ok, Poll} ->
             % remove the filter
-            NewFilters = filters:reset_contract_category(State#pks.filters, Poll#poll.chain_id),
+            NewFilters = filters:reset_contract_category(State#pks.filters, PollIndex),
             filters:store(NewFilters, "filters"),
             % work out what the category is now
-            Category = filters:category(NewFilters, Poll#poll.chain_id, Poll#poll.creator_id),
+            Category = filters:category(NewFilters, PollIndex, Poll#poll.creator_id),
             % build the new state
             NewPollState = Poll#poll{category = Category},
             NewPolls = maps:put(PollIndex, NewPollState, State#pks.polls),
@@ -251,9 +251,9 @@ do_filter_user(ID, Category, State) ->
     NewFilters = filters:set_account_category(State#pks.filters, ID, Category),
     filters:store(NewFilters, "filters"),
     % build the new state
-    UpdateCategory = fun(_, Poll) ->
+    UpdateCategory = fun(PollIndex, Poll) ->
                              NewCategory = filters:category(NewFilters,
-                                                            Poll#poll.chain_id,
+                                                            PollIndex,
                                                             Poll#poll.creator_id),
                              Poll#poll{category = NewCategory}
                      end,
@@ -269,10 +269,9 @@ do_get_filters(State) ->
 % fold function for building full filter lists for external rendering.
 % These lists will still use indices rather than names, because names are
 % really a part of the REST API, not really relevant to poll_keeper.
-add_default_category(_PollID, Poll, {AF, CF}) ->
+add_default_category(PollID, Poll, {AF, CF}) ->
     NewAF = maps:update_with(Poll#poll.creator_id, fun(Cat) -> Cat end, 1, AF),
-    % TODO: make filters use PollID as their index rather than the chain id.
-    NewCF = maps:update_with(Poll#poll.chain_id, fun(Cat) -> Cat end, default, CF),
+    NewCF = maps:update_with(PollID, fun(Cat) -> Cat end, default, CF),
     {NewAF, NewCF}.
 
 %%

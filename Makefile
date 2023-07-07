@@ -39,7 +39,7 @@ deps/ranch:
 deps/cowboy:
 	$(git-clone) https://github.com/ninenines/cowboy deps/cowboy --branch 2.9.0
 deps/zj:
-	$(git-clone) https://gitlab.com/zxq9/zj deps/zj --branch 1.1.0
+	$(git-clone) https://gitlab.com/zxq9/zj deps/zj --branch 1.1.2
 deps/aebytecode:
 	$(git-clone) https://github.com/aeternity/aebytecode.git deps/aebytecode --branch v3.2.0
 deps/base58:
