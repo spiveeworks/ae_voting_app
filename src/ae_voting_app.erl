@@ -26,7 +26,8 @@ start(_Type, _Args) ->
             {"/api/formRevokeVoteTX", aev_json_client, form_revoke_vote_tx},
             {"/api/postRevokeVoteTX", aev_json_client, post_revoke_vote_tx},
             {"/api/setPollCategory/formMsg", aev_json_admin, filter_poll_form_message},
-            {"/api/setPollCategory/submitSig", aev_json_admin, filter_poll}
+            {"/api/setPollCategory/submitSig", aev_json_admin, filter_poll},
+            {"/api/categorySettings", aev_json_admin, get_filters}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

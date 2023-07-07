@@ -2,11 +2,13 @@
 -behavior(cowboy_handler).
 
 -export([init/2, allowed_methods/2]).
--export([content_types_provided/2, content_types_accepted/2, handle_post/2]).
+-export([content_types_provided/2, content_types_accepted/2, handle_get/2, handle_post/2]).
 
 init(Req, State) ->
     {cowboy_rest, Req, State}.
 
+allowed_methods(Req, State = get_filters) ->
+    {[<<"GET">>, <<"OPTIONS">>], Req, State};
 allowed_methods(Req, State) ->
     {[<<"POST">>, <<"OPTIONS">>], Req, State}.
 
@@ -15,6 +17,19 @@ content_types_provided(Req, State) ->
         {{<<"application">>, <<"json">>, '*'}, handle_get}
     ],
     {Accepted, Req, State}.
+
+handle_get(Req, State = get_filters) ->
+    {AF, CF} = poll_keeper:get_filters(),
+    AFNamed = maps:map(fun map_id_to_name/2, AF),
+    CFNamed = maps:map(fun map_id_to_name/2, CF),
+    Data = zj:encode(#{account_categories => AFNamed,
+                       poll_categories => CFNamed}),
+    {Data, Req, State}.
+
+map_id_to_name(_, default) ->
+    default;
+map_id_to_name(_, ID) ->
+    aev_category_names:from_id(ID).
 
 content_types_accepted(Req, State) ->
     Accepted = [

@@ -3,7 +3,8 @@
 
 -export([start_link/0, add_poll/2, get_polls/1, get_poll_titles/0, get_poll/1,
         get_user_status/2, get_registry_address/0, get_poll_address/1,
-        track_vote/4, filter_poll/2, filter_poll_remove/1, filter_user/2]).
+        track_vote/4, filter_poll/2, filter_poll_remove/1, filter_user/2,
+        get_filters/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 %%
@@ -79,6 +80,8 @@ filter_poll_remove(PollIndex) ->
 filter_user(ID, Category) ->
     gen_server:cast(?MODULE, {filter_user, ID, Category}).
 
+get_filters() ->
+    gen_server:call(?MODULE, get_filters).
 
 %%
 % Callbacks
@@ -109,7 +112,10 @@ handle_call(get_registry_address, _, State) ->
     {reply, Result, State};
 handle_call({get_poll_address, Id}, _, State) ->
     Options = do_get_poll_address(Id, State),
-    {reply, Options, State}.
+    {reply, Options, State};
+handle_call(get_filters, _, State) ->
+    Filters = do_get_filters(State),
+    {reply, Filters, State}.
 
 handle_cast({add_poll, Title, Options}, State) ->
     NewState = do_add_poll(Title, Options, State),
@@ -254,6 +260,20 @@ do_filter_user(ID, Category, State) ->
     NewPolls = maps:map(UpdateCategory, State#pks.polls),
     State#pks{filters = NewFilters, polls = NewPolls}.
 
+do_get_filters(State) ->
+    {poll_filter_set, AF, CF} = State#pks.filters,
+    % for each poll, add an entry for it and its creator, if not already
+    % present.
+    maps:fold(fun add_default_category/3, {AF, CF}, State#pks.polls).
+
+% fold function for building full filter lists for external rendering.
+% These lists will still use indices rather than names, because names are
+% really a part of the REST API, not really relevant to poll_keeper.
+add_default_category(_PollID, Poll, {AF, CF}) ->
+    NewAF = maps:update_with(Poll#poll.creator_id, fun(Cat) -> Cat end, 1, AF),
+    % TODO: make filters use PollID as their index rather than the chain id.
+    NewCF = maps:update_with(Poll#poll.chain_id, fun(Cat) -> Cat end, default, CF),
+    {NewAF, NewCF}.
 
 %%
 % Ground Truth
