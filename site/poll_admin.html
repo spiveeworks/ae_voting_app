@@ -140,20 +140,24 @@
         let menu = document.createElement("select");
 
         let op1 = document.createElement("option");
-        op1.text = "official";
+        op1.text = "default";
         menu.add(op1);
 
         let op2 = document.createElement("option");
-        op2.text = "approved";
+        op2.text = "official";
         menu.add(op2);
 
         let op3 = document.createElement("option");
-        op3.text = "all";
+        op3.text = "approved";
         menu.add(op3);
 
         let op4 = document.createElement("option");
-        op4.text = "hidden";
+        op4.text = "all";
         menu.add(op4);
+
+        let op5 = document.createElement("option");
+        op5.text = "hidden";
+        menu.add(op5);
 
         for (var i = 0; i < menu.options.length; i++) {
             if (menu.options[i].text == selected) {
@@ -200,9 +204,10 @@
         return f;
     }
 
-    function generateTable(data) {
+    function generateTable(data, pc, ac) {
         let table = document.querySelector("table");
 
+        window.pc = pc;
         for (let element of data) {
             let row = table.insertRow();
 
@@ -212,18 +217,19 @@
             row.insertCell()
                .appendChild(document.createTextNode(element.close_height));
 
-            let category_text_node = document.createTextNode(element.category);
+            let category = pc[element.id];
+            let category_text_node = document.createTextNode(category);
             row.insertCell()
                .appendChild(category_text_node);
 
-            let [menu, button] = createDropdown(element.id, element.category,
+            let [menu, button] = createDropdown(element.id, category,
                                                 category_text_node);
             row.insertCell()
                .appendChild(menu);
             row.insertCell()
                .appendChild(button);
 
-            categories[element.id] = element.category;
+            categories[element.id] = category;
         }
 
         // Generate the head AFTER the body, because of course.
@@ -248,9 +254,11 @@
         login_button.innerText = "Select account";
         login_button.onclick = login;
 
-        let json = await fetch("/api/getPolls?category=hidden");
-        let obj = await json.json();
-        generateTable(obj.polls);
+        let polls_string = await fetch("/api/getPolls?category=hidden");
+        let polls = await polls_string.json();
+        let settings_string = await fetch("/api/categorySettings");
+        let settings = await settings_string.json();
+        generateTable(polls.polls, settings.poll_categories, settings.account_categories);
     }
 
     window.onload = updatePolls;

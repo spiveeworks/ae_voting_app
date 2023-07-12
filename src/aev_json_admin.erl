@@ -79,20 +79,41 @@ filter_poll(Req0, State) ->
             {false, Req1, State}
     end.
 
+filter_poll2(Req0, State, Poll, CategoryName, ID, Timestamp, Nonce, Signature) ->
+    case CategoryName of
+        <<"default">> ->
+            filter_poll_remove(Req0, State, Poll, ID,
+                               Timestamp, Nonce, Signature);
+        _ ->
+            filter_poll3(Req0, State, Poll, CategoryName, ID, Timestamp, Nonce,
+                         Signature)
+    end.
+
 % TODO: we could combine these commands together a little, since they are quite
 %       redundant
 % TODO: we could move this stuff over to admin_ops.erl once all the pieces have
 %       been decoded
-filter_poll2(Req0, State, Poll, CategoryName, ID, Timestamp, Nonce, Signature) ->
+filter_poll3(Req0, State, Poll, CategoryName, ID, Timestamp, Nonce, Signature) ->
     case aev_category_names:to_id(CategoryName) of
         {ok, Category} ->
-            filter_poll3(Req0, State, Poll, CategoryName, Category, ID,
+            filter_poll4(Req0, State, Poll, CategoryName, Category, ID,
                          Timestamp, Nonce, Signature);
         error ->
             {false, Req0, State}
     end.
 
-filter_poll3(Req0, State, Poll, CategoryName, Category, ID, Timestamp, Nonce, Signature) ->
+filter_poll_remove(Req0, State, Poll, ID, Timestamp, Nonce, Signature) ->
+    Message = filter_poll_payload(Poll, "default"),
+    case aev_auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
+        ok ->
+            poll_keeper:filter_poll_remove(Poll),
+            Req1 = cowboy_req:set_resp_body("{}", Req0),
+            {true, Req1, State};
+        error ->
+            {false, Req0, State}
+    end.
+
+filter_poll4(Req0, State, Poll, CategoryName, Category, ID, Timestamp, Nonce, Signature) ->
     Message = filter_poll_payload(Poll, CategoryName),
     case aev_auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
         ok ->
