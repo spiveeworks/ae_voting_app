@@ -38,6 +38,7 @@ start(_Type, _Args) ->
     Nodes = peer_list("peerlist"),
     vanillae:ae_nodes(Nodes),
     %vanillae:ae_nodes([{"localhost",3013}]),
+    %vanillae:ae_nodes([{"testnet.aeternity.io",3013}]),
     vanillae:network_id("ae_uat"),
 
     ae_voting_app_sup:start_link().

@@ -279,13 +279,30 @@ add_default_category(PollID, Poll, {AF, CF}) ->
 %%
 
 initial_state(RegistryID, Filters) ->
-    {ok, PollMap} = contract_man:query_polls(RegistryID),
+    Polls = case contract_man:query_polls(RegistryID) of
+                {ok, PollMap} ->
+                    convert_polls(PollMap, Filters);
+                {error, Error} ->
+                    io:format("Could not connect to network (~w), creating a "
+                              "fake poll to list instead.~n", [Error]),
+                    DummyPoll = #poll{chain_id = "n/a",
+                                      creator_id = "n/a",
+                                      category = 2,
+                                      title = "Fake Poll",
+                                      description = "Fake poll for testing the frontend. (Does not actually appear on chain)",
+                                      url = "example.com",
+                                      close_height = never_closes,
+                                      options = #{1 => #poll_option{name = "Option 1"},
+                                                  2 => #poll_option{name = "Option 2"}}},
+                    #{1 => DummyPoll}
+            end,
+    #pks{registry_id = RegistryID, polls = Polls, filters = Filters}.
 
+convert_polls(PollMap, Filters) ->
     ConvertPoll = fun(_Index, PollInfo) ->
                           read_poll_from_registry(Filters, PollInfo)
                   end,
-    Polls = maps:map(ConvertPoll, PollMap),
-    #pks{registry_id = RegistryID, polls = Polls, filters = Filters}.
+    maps:map(ConvertPoll, PollMap).
 
 read_poll_from_registry(Filters, PollInfo) ->
     PollID = maps:get("poll", PollInfo),
