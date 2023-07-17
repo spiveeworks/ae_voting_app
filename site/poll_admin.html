@@ -10,8 +10,11 @@
     var address;
 
     // cache of poll categories
-    var categories = {};
-    window.categories = categories;
+    var poll_categories = {};
+    window.poll_categories = poll_categories;
+
+    var author_categories = {};
+    window.author_categories = author_categories;
 
     function connect(logger) {
         return sk.connect(
@@ -95,7 +98,7 @@
     // this is probably pretty redundant with vote and revoke in
     // show_poll.html, might want to look and see what can be factored there,
     // if anything.
-    async function updateCategory(poll_id, category) {
+    async function updatePollCategory(poll_id, category) {
         if (!logged_in) return false;
 
         let logger = sk.cl();
@@ -136,31 +139,58 @@
         return submit_resp.ok;
     }
 
-    function createDropdown(poll_index, selected, out_node) {
+    async function updateAuthorCategory(author, category) {
+        if (!logged_in) return false;
+
+        let logger = sk.cl();
+
+        // message formation
+
+        let action_req_body = {
+            account: author,
+            category: category,
+            address: address
+        };
+        let action_resp = await post_json("/api/setAccountCategory/formMsg", action_req_body);
+        if (!action_resp.ok) return false;
+
+        let ts = action_resp.body.timestamp;
+        let nonce = action_resp.body.nonce;
+        let message = action_resp.body.message;
+
+        // sign message
+
+        let sign_result = await sign_message(logger, message);
+        if (!sign_result.ok) return false;
+
+        let signature = sign_result.result.signature;
+
+        // submit signature
+
+        let submit_req_body = {
+            account: author,
+            category: category,
+            address: address,
+            timestamp: ts,
+            nonce: nonce,
+            message_signature: signature
+        };
+        let submit_resp = await post_json("/api/setAccountCategory/submitSig", submit_req_body);
+
+        return submit_resp.ok;
+    }
+
+    function createPollDropdown(poll_index, selected, out_node) {
         let menu = document.createElement("select");
 
-        let op1 = document.createElement("option");
-        op1.text = "default";
-        menu.add(op1);
+        const options = ["default", "official", "approved", "all", "hidden"];
 
-        let op2 = document.createElement("option");
-        op2.text = "official";
-        menu.add(op2);
+        for (var i = 0; i < options.length; i++) {
+            let op = document.createElement("option");
+            op.text = options[i];
+            menu.add(op);
 
-        let op3 = document.createElement("option");
-        op3.text = "approved";
-        menu.add(op3);
-
-        let op4 = document.createElement("option");
-        op4.text = "all";
-        menu.add(op4);
-
-        let op5 = document.createElement("option");
-        op5.text = "hidden";
-        menu.add(op5);
-
-        for (var i = 0; i < menu.options.length; i++) {
-            if (menu.options[i].text == selected) {
+            if (options[i] == selected) {
                 menu.selectedIndex = i;
             }
         }
@@ -169,16 +199,40 @@
         button.innerText = "update";
         button.disabled = true;
 
-        menu.onchange = makeDropdownClosure(poll_index, menu, button);
-        button.onclick = makeButtonClosure(poll_index, menu, button, out_node);
+        menu.onchange = makeDropdownClosure(poll_index, poll_categories, menu, button);
+        button.onclick = makeButtonClosure(poll_index, poll_categories, updatePollCategory, menu, button, out_node);
+        return [menu, button];
+    }
+
+    function createAuthorDropdown(author, selected, out_node) {
+        let menu = document.createElement("select");
+
+        const options = ["official", "approved", "all", "hidden"];
+
+        for (var i = 0; i < options.length; i++) {
+            let op = document.createElement("option");
+            op.text = options[i];
+            menu.add(op);
+
+            if (options[i] == selected) {
+                menu.selectedIndex = i;
+            }
+        }
+
+        let button = document.createElement("button");
+        button.innerText = "update";
+        button.disabled = true;
+
+        menu.onchange = makeDropdownClosure(author, author_categories, menu, button);
+        button.onclick = makeButtonClosure(author, author_categories, updateAuthorCategory, menu, button, out_node);
 
         return [menu, button];
     }
 
-    function makeDropdownClosure(poll_index, menu, button) {
+    function makeDropdownClosure(address, categories, menu, button) {
         function f() {
             const choice = menu.options[menu.selectedIndex].text;
-            const actual = categories[poll_index];
+            const actual = categories[address];
             // Grey out button if the selected choice already matches what the
             // server last told us the category is.
             button.disabled = choice == actual;
@@ -186,12 +240,12 @@
         return f;
     }
 
-    function makeButtonClosure(poll_index, menu, button, out_node) {
+    function makeButtonClosure(address, categories, update, menu, button, out_node) {
         async function f() {
             const category = menu.options[menu.selectedIndex].text;
-            let success = await updateCategory(poll_index, category);
+            let success = await update(address, category);
             if (success) {
-                categories[poll_index] = category;
+                categories[address] = category;
                 out_node.textContent = category;
                 // similar to the onchange action created by
                 // makeDropdownClosure, but this time based on the selected
@@ -204,10 +258,9 @@
         return f;
     }
 
-    function generateTable(data, pc, ac) {
-        let table = document.querySelector("table");
+    function generatePollTable(data) {
+        let table = document.getElementById("poll_table");
 
-        window.pc = pc;
         for (let element of data) {
             let row = table.insertRow();
 
@@ -217,19 +270,17 @@
             row.insertCell()
                .appendChild(document.createTextNode(element.close_height));
 
-            let category = pc[element.id];
+            let category = poll_categories[element.id];
             let category_text_node = document.createTextNode(category);
             row.insertCell()
                .appendChild(category_text_node);
 
-            let [menu, button] = createDropdown(element.id, category,
-                                                category_text_node);
+            let [menu, button] = createPollDropdown(element.id, category,
+                                                    category_text_node);
             row.insertCell()
                .appendChild(menu);
             row.insertCell()
                .appendChild(button);
-
-            categories[element.id] = category;
         }
 
         // Generate the head AFTER the body, because of course.
@@ -249,6 +300,42 @@
         row.appendChild(th3);
     }
 
+    function generateAuthorTable(data) {
+        let table = document.getElementById("author_table");
+
+        for (let [author, category] of Object.entries(author_categories)) {
+            let row = table.insertRow();
+
+            // Add a column for the poll id
+            row.insertCell()
+               .appendChild(document.createTextNode(author));
+            row.insertCell()
+               .appendChild(document.createTextNode(category));
+
+            let category_text_node = document.createTextNode(category);
+            row.insertCell()
+               .appendChild(category_text_node);
+
+            let [menu, button] = createAuthorDropdown(author, category, category_text_node);
+            row.insertCell()
+               .appendChild(menu);
+            row.insertCell()
+               .appendChild(button);
+        }
+
+        // Generate the head AFTER the body, because of course.
+        let thead = table.createTHead();
+        let row = thead.insertRow();
+
+        let th1 = document.createElement("th");
+        th1.appendChild(document.createTextNode("Account"));
+        row.appendChild(th1);
+
+        let th2 = document.createElement("th");
+        th2.appendChild(document.createTextNode("Category"));
+        row.appendChild(th2);
+    }
+
     async function updatePolls() {
         let login_button = document.getElementById("login_button");
         login_button.innerText = "Select account";
@@ -258,7 +345,16 @@
         let polls = await polls_string.json();
         let settings_string = await fetch("/api/categorySettings");
         let settings = await settings_string.json();
-        generateTable(polls.polls, settings.poll_categories, settings.account_categories);
+
+        poll_categories = settings.poll_categories;
+        window.poll_categories = poll_categories;
+
+        author_categories = settings.account_categories;
+        window.author_categories = author_categories;
+
+        generatePollTable(polls.polls);
+
+        generateAuthorTable(polls.polls);
     }
 
     window.onload = updatePolls;
@@ -269,7 +365,11 @@
 
 <button id="login_button">Loading...</button>
 
-<table>
+<table id="poll_table">
+<!-- to be generated client-side --!>
+</table>
+
+<table id="author_table">
 <!-- to be generated client-side --!>
 </table>
 
