@@ -306,11 +306,8 @@
         for (let [author, category] of Object.entries(author_categories)) {
             let row = table.insertRow();
 
-            // Add a column for the poll id
             row.insertCell()
                .appendChild(document.createTextNode(author));
-            row.insertCell()
-               .appendChild(document.createTextNode(category));
 
             let category_text_node = document.createTextNode(category);
             row.insertCell()
@@ -365,9 +362,13 @@
 
 <button id="login_button">Loading...</button>
 
+<h3>Poll categories:</h3>
+
 <table id="poll_table">
 <!-- to be generated client-side --!>
 </table>
+
+<h3>Poll author categories:</h3>
 
 <table id="author_table">
 <!-- to be generated client-side --!>

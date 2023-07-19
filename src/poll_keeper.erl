@@ -3,7 +3,7 @@
 
 -export([start_link/0, add_poll/2, get_polls/1, get_poll_titles/0, get_poll/1,
         get_user_status/2, get_registry_address/0, get_poll_address/1,
-        track_vote/4, filter_poll/2, filter_poll_remove/1, filter_user/2,
+        track_vote/4, filter_poll/2, filter_poll_remove/1, filter_account/2,
         get_filters/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
@@ -77,8 +77,8 @@ filter_poll(PollIndex, Category) ->
 filter_poll_remove(PollIndex) ->
     gen_server:cast(?MODULE, {filter_poll_remove, PollIndex}).
 
-filter_user(ID, Category) ->
-    gen_server:cast(?MODULE, {filter_user, ID, Category}).
+filter_account(ID, Category) ->
+    gen_server:cast(?MODULE, {filter_account, ID, Category}).
 
 get_filters() ->
     gen_server:call(?MODULE, get_filters).
@@ -129,8 +129,8 @@ handle_cast({filter_poll, PollIndex, Category}, State) ->
 handle_cast({filter_poll_remove, PollIndex}, State) ->
     NewState = do_filter_poll_remove(PollIndex, State),
     {noreply, NewState};
-handle_cast({filter_user, ID, Category}, State) ->
-    NewState = do_filter_user(ID, Category, State),
+handle_cast({filter_account, ID, Category}, State) ->
+    NewState = do_filter_account(ID, Category, State),
     {noreply, NewState}.
 
 handle_info({subscribe_tx, {track_vote, PollIndex, ID, TH}, {ok, {}}}, State) ->
@@ -246,7 +246,8 @@ do_filter_poll_remove(PollIndex, State) ->
             State
     end.
 
-do_filter_user(ID, Category, State) ->
+do_filter_account(IDRaw, Category, State) ->
+    ID = unicode:characters_to_list(IDRaw),
     % add the filter
     NewFilters = filters:set_account_category(State#pks.filters, ID, Category),
     filters:store(NewFilters, "filters"),
