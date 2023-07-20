@@ -29,6 +29,10 @@ init([]) ->
         },
 
         #{
+            id => permissions,
+            start => {permissions, start_link, []}
+        },
+        #{
             id => aev_auth,
             start => {aev_auth, start_link, []}
         }

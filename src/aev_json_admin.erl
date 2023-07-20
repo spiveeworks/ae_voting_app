@@ -54,8 +54,12 @@ filter_poll_form_message(Req0, State) ->
         {ok, #{<<"poll_id">> := Poll,
                <<"category">> := Category,
                <<"address">> := ID}, Req1} ->
-            Payload = filter_poll_payload(Poll, Category),
-            reply_message(Req1, State, Payload, ID);
+            case permissions:can_set_categories(ID) of
+                false -> {false, Req1, State};
+                true ->
+                    Payload = filter_poll_payload(Poll, Category),
+                    reply_message(Req1, State, Payload, ID)
+            end;
         {ok, Body, Req1} ->
             io:format("Invalid data received: ~p~n", [Body]),
             {false, Req1, State};
@@ -145,8 +149,12 @@ filter_account_form_message(Req0, State) ->
         {ok, #{<<"account">> := Account,
                <<"category">> := Category,
                <<"address">> := ID}, Req1} ->
-            Payload = filter_account_payload(Account, Category),
-            reply_message(Req1, State, Payload, ID);
+            case permissions:can_set_categories(ID) of
+                false -> {false, Req1, State};
+                true ->
+                    Payload = filter_account_payload(Account, Category),
+                    reply_message(Req1, State, Payload, ID)
+            end;
         {ok, Body, Req1} ->
             io:format("Invalid data received: ~p~n", [Body]),
             {false, Req1, State};
