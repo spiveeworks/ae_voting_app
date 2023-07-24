@@ -371,37 +371,49 @@
         row.appendChild(th3);
     }
 
+    function addAuthorTableRow(author, category, permission_level) {
+        let table = document.getElementById("author_table");
+
+        let row = table.insertRow();
+
+        row.insertCell()
+           .appendChild(document.createTextNode(author));
+
+        let category_text_node = document.createTextNode(category);
+        row.insertCell()
+           .appendChild(category_text_node);
+
+        let [menu, button] = createAuthorDropdown(author, category, category_text_node);
+        row.insertCell()
+           .appendChild(menu);
+        row.insertCell()
+           .appendChild(button);
+
+        let permission_text_node = document.createTextNode(permission_level);
+        row.insertCell()
+           .appendChild(permission_text_node);
+        let [pmenu, pbutton] = createAuthorPermissionsDropdown(author, permission_level, permission_text_node);
+        row.insertCell()
+           .appendChild(pmenu);
+        row.insertCell()
+           .appendChild(pbutton);
+    }
+
     function generateAuthorTable(data, permissions) {
         let table = document.getElementById("author_table");
 
         for (let [author, category] of Object.entries(author_categories)) {
-            let row = table.insertRow();
-
-            row.insertCell()
-               .appendChild(document.createTextNode(author));
-
-            let category_text_node = document.createTextNode(category);
-            row.insertCell()
-               .appendChild(category_text_node);
-
-            let [menu, button] = createAuthorDropdown(author, category, category_text_node);
-            row.insertCell()
-               .appendChild(menu);
-            row.insertCell()
-               .appendChild(button);
-
             var permission_level = "none";
             if (author in permissions) {
                 permission_level = permissions[author];
             }
-            let permission_text_node = document.createTextNode(permission_level);
-            row.insertCell()
-               .appendChild(permission_text_node);
-            let [pmenu, pbutton] = createAuthorPermissionsDropdown(author, permission_level, permission_text_node);
-            row.insertCell()
-               .appendChild(pmenu);
-            row.insertCell()
-               .appendChild(pbutton);
+            addAuthorTableRow(author, category, permission_level);
+        }
+
+        for (let [user, permission_level] of Object.entries(permissions)) {
+            if (!(user in author_categories)) {
+                addAuthorTableRow(user, "all", permission_level);
+            }
         }
 
         // Generate the head AFTER the body, because of course.
