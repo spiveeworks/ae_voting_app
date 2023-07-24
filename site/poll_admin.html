@@ -16,6 +16,9 @@
     var author_categories = {};
     window.author_categories = author_categories;
 
+    var permissions = {};
+    window.permissions = permissions;
+
     function connect(logger) {
         return sk.connect(
             'ske-connect-1',
@@ -110,7 +113,7 @@
             category: category,
             address: address
         };
-        let action_resp = await post_json("/api/setPollCategory/formMsg", action_req_body);
+        let action_resp = await post_json("/api/setPollCategory/formMessage", action_req_body);
         if (!action_resp.ok) return false;
 
         let ts = action_resp.body.timestamp;
@@ -151,7 +154,7 @@
             category: category,
             address: address
         };
-        let action_resp = await post_json("/api/setAccountCategory/formMsg", action_req_body);
+        let action_resp = await post_json("/api/setAccountCategory/formMessage", action_req_body);
         if (!action_resp.ok) return false;
 
         let ts = action_resp.body.timestamp;
@@ -176,6 +179,47 @@
             message_signature: signature
         };
         let submit_resp = await post_json("/api/setAccountCategory/submitSig", submit_req_body);
+
+        return submit_resp.ok;
+    }
+
+    async function updatePermissions(author, permission_level) {
+        if (!logged_in) return false;
+
+        let logger = sk.cl();
+
+        // message formation
+
+        let action_req_body = {
+            account: author,
+            permission_level: permission_level,
+            address: address
+        };
+        let action_resp = await post_json("/api/setAccountPermissions/formMessage", action_req_body);
+        if (!action_resp.ok) return false;
+
+        let ts = action_resp.body.timestamp;
+        let nonce = action_resp.body.nonce;
+        let message = action_resp.body.message;
+
+        // sign message
+
+        let sign_result = await sign_message(logger, message);
+        if (!sign_result.ok) return false;
+
+        let signature = sign_result.result.signature;
+
+        // submit signature
+
+        let submit_req_body = {
+            account: author,
+            permission_level: permission_level,
+            address: address,
+            timestamp: ts,
+            nonce: nonce,
+            message_signature: signature
+        };
+        let submit_resp = await post_json("/api/setAccountPermissions/submitSig", submit_req_body);
 
         return submit_resp.ok;
     }
@@ -228,6 +272,33 @@
 
         return [menu, button];
     }
+
+    function createAuthorPermissionsDropdown(author, selected, out_node) {
+        let menu = document.createElement("select");
+
+        const options = ["none", "can_create_polls", "can_set_categories",
+                         "can_change_permissions"];
+
+        for (var i = 0; i < options.length; i++) {
+            let op = document.createElement("option");
+            op.text = options[i];
+            menu.add(op);
+
+            if (options[i] == selected) {
+                menu.selectedIndex = i;
+            }
+        }
+
+        let button = document.createElement("button");
+        button.innerText = "update";
+        button.disabled = true;
+
+        menu.onchange = makeDropdownClosure(author, permissions, menu, button);
+        button.onclick = makeButtonClosure(author, permissions, updatePermissions, menu, button, out_node);
+
+        return [menu, button];
+    }
+
 
     function makeDropdownClosure(address, categories, menu, button) {
         function f() {
@@ -300,7 +371,7 @@
         row.appendChild(th3);
     }
 
-    function generateAuthorTable(data) {
+    function generateAuthorTable(data, permissions) {
         let table = document.getElementById("author_table");
 
         for (let [author, category] of Object.entries(author_categories)) {
@@ -318,6 +389,19 @@
                .appendChild(menu);
             row.insertCell()
                .appendChild(button);
+
+            var permission_level = "none";
+            if (author in permissions) {
+                permission_level = permissions[author];
+            }
+            let permission_text_node = document.createTextNode(permission_level);
+            row.insertCell()
+               .appendChild(permission_text_node);
+            let [pmenu, pbutton] = createAuthorPermissionsDropdown(author, permission_level, permission_text_node);
+            row.insertCell()
+               .appendChild(pmenu);
+            row.insertCell()
+               .appendChild(pbutton);
         }
 
         // Generate the head AFTER the body, because of course.
@@ -331,6 +415,13 @@
         let th2 = document.createElement("th");
         th2.appendChild(document.createTextNode("Category"));
         row.appendChild(th2);
+
+        row.appendChild(document.createElement("th"));
+        row.appendChild(document.createElement("th"));
+
+        let th5 = document.createElement("th");
+        th5.appendChild(document.createTextNode("Permissions"));
+        row.appendChild(th5);
     }
 
     async function updatePolls() {
@@ -342,6 +433,8 @@
         let polls = await polls_string.json();
         let settings_string = await fetch("/api/categorySettings");
         let settings = await settings_string.json();
+        let permissions_string = await fetch("/api/permissionSettings");
+        permissions = await permissions_string.json();
 
         poll_categories = settings.poll_categories;
         window.poll_categories = poll_categories;
@@ -349,9 +442,11 @@
         author_categories = settings.account_categories;
         window.author_categories = author_categories;
 
+        window.permissions = permissions;
+
         generatePollTable(polls.polls);
 
-        generateAuthorTable(polls.polls);
+        generateAuthorTable(polls.polls, permissions);
     }
 
     window.onload = updatePolls;
@@ -368,7 +463,7 @@
 <!-- to be generated client-side --!>
 </table>
 
-<h3>Poll author categories:</h3>
+<h3>Poll Creators and Curators:</h3>
 
 <table id="author_table">
 <!-- to be generated client-side --!>

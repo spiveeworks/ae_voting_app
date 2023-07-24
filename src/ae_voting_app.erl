@@ -25,11 +25,15 @@ start(_Type, _Args) ->
             {"/api/postVoteTX", aev_json_client, post_vote_tx},
             {"/api/formRevokeVoteTX", aev_json_client, form_revoke_vote_tx},
             {"/api/postRevokeVoteTX", aev_json_client, post_revoke_vote_tx},
-            {"/api/setPollCategory/formMsg", aev_json_admin, filter_poll_form_message},
+
+            {"/api/categorySettings", aev_json_admin, get_filters},
+            {"/api/setPollCategory/formMessage", aev_json_admin, filter_poll_form_message},
             {"/api/setPollCategory/submitSig", aev_json_admin, filter_poll},
-            {"/api/setAccountCategory/formMsg", aev_json_admin, filter_account_form_message},
+            {"/api/setAccountCategory/formMessage", aev_json_admin, filter_account_form_message},
             {"/api/setAccountCategory/submitSig", aev_json_admin, filter_account},
-            {"/api/categorySettings", aev_json_admin, get_filters}
+            {"/api/permissionSettings", aev_json_admin, get_permissions},
+            {"/api/setAccountPermissions/formMessage", aev_json_admin, set_permissions_form_message},
+            {"/api/setAccountPermissions/submitSig", aev_json_admin, set_permissions}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

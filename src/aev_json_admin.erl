@@ -9,6 +9,8 @@ init(Req, State) ->
 
 allowed_methods(Req, State = get_filters) ->
     {[<<"GET">>, <<"OPTIONS">>], Req, State};
+allowed_methods(Req, State = get_permissions) ->
+    {[<<"GET">>, <<"OPTIONS">>], Req, State};
 allowed_methods(Req, State) ->
     {[<<"POST">>, <<"OPTIONS">>], Req, State}.
 
@@ -24,12 +26,20 @@ handle_get(Req, State = get_filters) ->
     CFNamed = maps:map(fun map_id_to_name/2, CF),
     Data = zj:encode(#{account_categories => AFNamed,
                        poll_categories => CFNamed}),
+    {Data, Req, State};
+handle_get(Req, State = get_permissions) ->
+    Permissions = permissions:get_all(),
+    PermissionsNamed = maps:map(fun map_permission_id_to_name/2, Permissions),
+    Data = zj:encode(PermissionsNamed),
     {Data, Req, State}.
 
 map_id_to_name(_, default) ->
     default;
 map_id_to_name(_, ID) ->
     aev_category_names:from_id(ID).
+
+map_permission_id_to_name(_, ID) ->
+    aev_category_names:permissions_from_id(ID).
 
 content_types_accepted(Req, State) ->
     Accepted = [
@@ -44,7 +54,11 @@ handle_post(Req, State = filter_poll) ->
 handle_post(Req, State = filter_account_form_message) ->
     filter_account_form_message(Req, State);
 handle_post(Req, State = filter_account) ->
-    filter_account(Req, State).
+    filter_account(Req, State);
+handle_post(Req, State = set_permissions_form_message) ->
+    set_permissions_form_message(Req, State);
+handle_post(Req, State = set_permissions) ->
+    set_permissions(Req, State).
 
 %%%%%%%%%%%%%%%%%%%
 % Poll Categories
@@ -203,6 +217,70 @@ filter_account3(Req0, State, Account, CategoryName, Category, ID, Timestamp, Non
 
 filter_account_payload(Account, Category) ->
     Txt = io_lib:format("set category of account ~s to ~s", [Account, Category]),
+    unicode:characters_to_list(Txt).
+
+%%%%%%%%%%%%%%%%%%%%%%%
+% Account Permissions
+
+set_permissions_form_message(Req0, State) ->
+    case aev_json_parse:parse_req_body(Req0) of
+        {ok, #{<<"account">> := Account,
+               <<"permission_level">> := PermissionLevel,
+               <<"address">> := ID}, Req1} ->
+            case permissions:can_change_permissions(ID) of
+                false -> {false, Req1, State};
+                true ->
+                    Payload = set_permissions_payload(Account, PermissionLevel),
+                    reply_message(Req1, State, Payload, ID)
+            end;
+        {ok, Body, Req1} ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            {false, Req1, State};
+        {error, Req1} ->
+            io:format("Failure.~n", []),
+            {false, Req1, State}
+    end.
+
+set_permissions(Req0, State) ->
+    case aev_json_parse:parse_req_body(Req0) of
+        {ok, #{<<"account">> := Account,
+               <<"permission_level">> := PermissionLevel,
+               <<"address">> := ID,
+               <<"timestamp">> := Timestamp,
+               <<"nonce">> := Nonce,
+               <<"message_signature">> := Signature}, Req1} ->
+            set_permissions2(Req1, State, Account, PermissionLevel, ID, Timestamp, Nonce,
+                         Signature);
+        {ok, Body, Req1} ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            {false, Req1, State};
+        {error, Req1} ->
+            io:format("Failure.~n", []),
+            {false, Req1, State}
+    end.
+
+set_permissions2(Req0, State, Account, PermissionLevelName, ID, Timestamp, Nonce, Signature) ->
+    case aev_category_names:permissions_to_id(PermissionLevelName) of
+        {ok, PermissionLevel} ->
+            set_permissions3(Req0, State, Account, PermissionLevelName,
+                             PermissionLevel, ID, Timestamp, Nonce, Signature);
+        error ->
+            {false, Req0, State}
+    end.
+
+set_permissions3(Req0, State, Account, PermissionLevelName, PermissionLevel, ID, Timestamp, Nonce, Signature) ->
+    Message = set_permissions_payload(Account, PermissionLevelName),
+    case aev_auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
+        ok ->
+            permissions:set(Account, PermissionLevel),
+            Req1 = cowboy_req:set_resp_body("{}", Req0),
+            {true, Req1, State};
+        error ->
+            {false, Req0, State}
+    end.
+
+set_permissions_payload(Account, PermissionLevel) ->
+    Txt = io_lib:format("set permission level of account ~s to ~s", [Account, PermissionLevel]),
     unicode:characters_to_list(Txt).
 
 %%%%%%%%%%
