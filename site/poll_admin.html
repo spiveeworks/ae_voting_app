@@ -406,12 +406,16 @@
             var permission_level = "none";
             if (author in permissions) {
                 permission_level = permissions[author];
+            } else {
+                permissions[author] = "none";
             }
             addAuthorTableRow(author, category, permission_level);
         }
 
         for (let [user, permission_level] of Object.entries(permissions)) {
             if (!(user in author_categories)) {
+                author_categories[user] = "all";
+
                 addAuthorTableRow(user, "all", permission_level);
             }
         }
