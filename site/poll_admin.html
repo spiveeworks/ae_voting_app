@@ -231,6 +231,7 @@
 
         for (var i = 0; i < options.length; i++) {
             let op = document.createElement("option");
+            op.value = options[i];
             op.text = options[i];
             menu.add(op);
 
@@ -255,6 +256,7 @@
 
         for (var i = 0; i < options.length; i++) {
             let op = document.createElement("option");
+            op.value = options[i];
             op.text = options[i];
             menu.add(op);
 
@@ -281,6 +283,7 @@
 
         for (var i = 0; i < options.length; i++) {
             let op = document.createElement("option");
+            op.value = options[i];
             op.text = options[i];
             menu.add(op);
 
@@ -302,7 +305,7 @@
 
     function makeDropdownClosure(address, categories, menu, button) {
         function f() {
-            const choice = menu.options[menu.selectedIndex].text;
+            const choice = menu.options[menu.selectedIndex].value;
             const actual = categories[address];
             // Grey out button if the selected choice already matches what the
             // server last told us the category is.
@@ -313,7 +316,7 @@
 
     function makeButtonClosure(address, categories, update, menu, button, out_node) {
         async function f() {
-            const category = menu.options[menu.selectedIndex].text;
+            const category = menu.options[menu.selectedIndex].value;
             let success = await update(address, category);
             if (success) {
                 categories[address] = category;
@@ -322,7 +325,7 @@
                 // makeDropdownClosure, but this time based on the selected
                 // category, and a previous selected category, which is now the
                 // actual category server-side.
-                const selected_now = menu.options[menu.selectedIndex].text;
+                const selected_now = menu.options[menu.selectedIndex].value;
                 button.disabled = selected_now == category;
             }
         }
@@ -440,10 +443,68 @@
         row.appendChild(th5);
     }
 
+    async function addNewUser(event) {
+        let form = event.target;
+
+        let address = form[0].value;
+        let category_index = form[1].selectedIndex;
+        let category = form[1].options[category_index].value;
+        let permission_index = form[2].selectedIndex;
+        let permission_level = form[2].options[permission_index].value;
+
+        let table = document.getElementById("author_table");
+        let row_index = -1;
+        if (address in author_categories) {
+            for (var i = 1; i < table.rows.length && row_index == -1; i++) {
+                if (table.rows[i].cells[0].textContent == address) {
+                    row_index = i;
+                }
+            }
+        }
+        if (row_index == -1) {
+            author_categories[address] = "all";
+            permissions[address] = "none";
+            addAuthorTableRow(address, "all", "none");
+            row_index = table.rows.length - 1;
+        }
+
+        let cells = table.rows[row_index].cells;
+        cells[2].children[0].selectedIndex = category_index;
+        cells[5].children[0].selectedIndex = permission_index;
+
+        cells[3].children[0].disabled = author_categories[address] == category;
+        cells[6].children[0].disabled = permissions[address] == permission_level;
+
+        if (author_categories[address] != category) {
+            let success = await updateAuthorCategory(address, category);
+            if (!success) {
+                return;
+            }
+
+            author_categories[address] = category;
+            cells[1].textContent = category;
+            cells[3].children[0].disabled = true;
+        }
+
+        if (permissions[address] != permission_level) {
+            let success = await updatePermissions(address, permission_level);
+            if (!success) {
+                return;
+            }
+
+            permissions[address] = permission_level;
+            cells[4].textContent = permission_level;
+            cells[6].children[0].disabled = true;
+        }
+    }
+
     async function updatePolls() {
         let login_button = document.getElementById("login_button");
         login_button.innerText = "Select account";
         login_button.onclick = login;
+
+        let form = document.querySelector("form");
+        form.addEventListener("submit", addNewUser);
 
         let polls_string = await fetch("/api/getPolls?category=hidden");
         let polls = await polls_string.json();
@@ -466,7 +527,6 @@
     }
 
     window.onload = updatePolls;
-    //setInterval(updateCounter, 1000);
 </script>
 
 <p id="login_status">No account selected.</p>
@@ -479,11 +539,47 @@
 <!-- to be generated client-side --!>
 </table>
 
-<h3>Poll Creators and Curators:</h3>
+<h3>Account Categories and Permissions:</h3>
 
 <table id="author_table">
 <!-- to be generated client-side --!>
 </table>
+
+<h3>Add New Account:</h3>
+
+<form onsubmit="return false;" accept-charset="utf-8">
+    <table>
+    <tr>
+        <th>Address</th>
+        <th>Category</th>
+        <th>Permissions</th>
+    </tr>
+    <tr>
+        <td>
+            <input type="text" name="address"/>
+        </td>
+        <td>
+            <select name="category">
+                <option value="official">official</option>
+                <option value="approved">approved</option>
+                <option value="all">all</option>
+                <option value="hidden">hidden</option>
+            </select>
+        </td>
+        <td>
+            <select name="permissions">
+                <option value="none">none</option>
+                <option value="can_create_polls">can_create_polls</option>
+                <option value="can_set_categories">can_set_categories</option>
+                <option value="can_change_permissions">can_change_permissions</option>
+            </select>
+        </td>
+        <td>
+            <input type="submit" value="add"/>
+        </td>
+    </tr>
+    </table>
+</form>
 
 </body>
 </html>
