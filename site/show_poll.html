@@ -4,53 +4,13 @@
 
 <script type="module">
     import * as sk from "../sidekick.js";
-
-    var logged_in = false;
-    var address;
-
-    function connect(logger) {
-        return sk.connect(
-            'ske-connect-1',
-            {name: 'sidekick examples',
-             version: 1},
-            sk.TIMEOUT_DEF_CONNECT_MS,
-            "failed to connect to wallet",
-            logger
-        );
-    }
-
-    function sign_tx(logger, tx) {
-        let sign_params = {
-            tx: tx,
-            returnSigned: true,
-            networkId: "ae_uat"
-        };
-        return sk.tx_sign_noprop('sk-tx-sign-1', sign_params, sk.TIMEOUT_DEF_TX_SIGN_NOPROP_MS, 'sign transaction timed out', logger);
-    }
+    import * as aev from "/aev_util.js";
 
     async function login() {
-        let logger = sk.cl();
+        let login_success = await aev.login();
+        if (!login_success) return;
 
-        await connect(logger);
-        let wallet_info = await sk.address(
-            'ske-address-1',
-            {type: 'subscribe',
-             value: 'connected'},
-            sk.TIMEOUT_DEF_ADDRESS_MS,
-            "failed to address to wallet",
-            logger
-        );
-        if (!wallet_info.ok) return;
-
-        let maybe_address = Object.keys(wallet_info.result.address.current)[0];
-        if (maybe_address === undefined) return;
-
-        address = maybe_address;
-        logged_in = true;
-        document.getElementById("login_status").innerHTML = "Viewing as " + address;
-        document.getElementById("login_button").innerText = "Change account";
-
-        let status_response = await fetch("/api/poll/" + getID() + "/user/" + address);
+        let status_response = await fetch("/api/poll/" + getID() + "/user/" + aev.address);
         if (!status_response.ok) return;
         let vote_status = await status_response.json();
         let current = vote_status.current_vote;
@@ -83,95 +43,27 @@
         }
     }
 
-    async function post_json(url, body) {
-        let response = await fetch(
-            url,
-            {
-                method: "post",
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-            }
-        );
-
-        if (response.ok) {
-            let body = await response.json();
-            return {ok: true, body: body};
-        } else {
-            return response;
-        }
-    }
-
     async function vote(option_id) {
-        if (!logged_in) return;
-
-        let logger = sk.cl();
-
         let poll_id = Number(getID());
 
-        // form tx
-
-        let tx_req_body = {
+        let request = {
             poll_id: poll_id,
             option_id: option_id,
-            address: address
         };
-        let tx_resp = await post_json("/api/formVoteTX", tx_req_body);
-        if (!tx_resp.ok) return;
 
-        let tx = tx_resp.body.tx;
-
-        // sign tx
-        let signed_result = await sign_tx(logger, tx);
-        if (!signed_result.ok) return;
-
-        let signed_tx = signed_result.result.signedTransaction;
-
-        // post tx
-        let post_req_body = {
-            poll_id: poll_id,
-            option_id: option_id,
-            address: address,
-            signed_tx: signed_tx
-        };
-        let post_resp = await post_json("/api/postVoteTX", post_req_body);
+        let post_resp = await aev.form_and_post("/api/vote", request);
 
         if (post_resp.ok) setButtonsPending();
     }
 
     async function revoke() {
-        if (!logged_in) return;
-
-        let logger = sk.cl();
-
         let poll_id = Number(getID());
 
-        // form tx
-
-        let tx_req_body = {
-            poll_id: poll_id,
-            address: address
+        let request = {
+            poll_id: poll_id
         };
-        let tx_resp = await post_json("/api/formRevokeVoteTX", tx_req_body);
-        if (!tx_resp.ok) return;
 
-        let tx = tx_resp.body.tx;
-
-        // sign tx
-        let signed_result = await sign_tx(logger, tx);
-        if (!signed_result.ok) return;
-
-        let signed_tx = signed_result.result.signedTransaction;
-
-        // post tx
-        let post_req_body = {
-            poll_id: poll_id,
-            address: address,
-            signed_tx: signed_tx
-        };
-        let post_resp = await post_json("/api/postRevokeVoteTX", post_req_body);
+        let post_resp = await aev.form_and_post("/api/revokeVote", request);
 
         if (post_resp.ok) setButtonsPending();
     }
@@ -242,7 +134,7 @@
         let text = document.getElementById("text");
         let path = window.location.pathname.split("/");
         let id_str = path[path.length - 1];
-        return id_str; // We could convert this to a number, but it only ever gets used to build HTTP request URLs, so there is no need.
+        return id_str; // We could convert this to a number, but it usually just gets used to build HTTP request URLs, so there is no need.
     }
 
     window.onload = updatePolls;

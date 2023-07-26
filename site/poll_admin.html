@@ -3,11 +3,8 @@
 <body>
 
 <script type="module">
-    import * as sk from "../sidekick.js";
-
-    // account selection 'login' stuff
-    var logged_in = false;
-    var address;
+    import * as sk from "/sidekick.js";
+    import * as aev from "/aev_util.js";
 
     // cache of poll categories
     var poll_categories = {};
@@ -19,76 +16,10 @@
     var permissions = {};
     window.permissions = permissions;
 
-    function connect(logger) {
-        return sk.connect(
-            'ske-connect-1',
-            {name: 'sidekick examples',
-             version: 1},
-            sk.TIMEOUT_DEF_CONNECT_MS,
-            "failed to connect to wallet",
-            logger
-        );
-    }
-
-    function sign_tx(logger, tx) {
-        let sign_params = {
-            tx: tx,
-            returnSigned: true,
-            networkId: "ae_uat"
-        };
-        return sk.tx_sign_noprop('sk-tx-sign-1', sign_params, sk.TIMEOUT_DEF_TX_SIGN_NOPROP_MS, 'sign transaction timed out', logger);
-    }
-
-    // This is the first half of login() from show_poll.html - factor these?
-    async function login() {
-        let logger = sk.cl();
-
-        await connect(logger);
-        let wallet_info = await sk.address(
-            'ske-address-1',
-            {type: 'subscribe',
-             value: 'connected'},
-            sk.TIMEOUT_DEF_ADDRESS_MS,
-            "failed to address to wallet",
-            logger
-        );
-        if (!wallet_info.ok) return;
-
-        let maybe_address = Object.keys(wallet_info.result.address.current)[0];
-        if (maybe_address === undefined) return;
-
-        address = maybe_address;
-        logged_in = true;
-        document.getElementById("login_status").innerHTML = "Viewing as " + address;
-        document.getElementById("login_button").innerText = "Change account";
-    }
-
-    // this also appears in show_poll.html - util module?
-    async function post_json(url, body) {
-        let response = await fetch(
-            url,
-            {
-                method: "post",
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-            }
-        );
-
-        if (response.ok) {
-            let body = await response.json();
-            return {ok: true, body: body};
-        } else {
-            return response;
-        }
-    }
-
     function sign_message(logger, message) {
         let promise = sk.msg_sign(
             'ske-msg_sign-1',
-            address,
+            aev.address,
             message,
             sk.TIMEOUT_DEF_MSG_SIGN_MS,
             'sign message timed out',
@@ -98,128 +29,35 @@
         return promise;
     }
 
-    // this is probably pretty redundant with vote and revoke in
-    // show_poll.html, might want to look and see what can be factored there,
-    // if anything.
     async function updatePollCategory(poll_id, category) {
-        if (!logged_in) return false;
-
-        let logger = sk.cl();
-
-        // message formation
-
-        let action_req_body = {
+        let request = {
             poll_id: poll_id,
-            category: category,
-            address: address
+            category: category
         };
-        let action_resp = await post_json("/api/setPollCategory/formMessage", action_req_body);
-        if (!action_resp.ok) return false;
 
-        let ts = action_resp.body.timestamp;
-        let nonce = action_resp.body.nonce;
-        let message = action_resp.body.message;
-
-        // sign message
-
-        let sign_result = await sign_message(logger, message);
-        if (!sign_result.ok) return false;
-
-        let signature = sign_result.result.signature;
-
-        // submit signature
-
-        let submit_req_body = {
-            poll_id: poll_id,
-            category: category,
-            address: address,
-            timestamp: ts,
-            nonce: nonce,
-            message_signature: signature
-        };
-        let submit_resp = await post_json("/api/setPollCategory/submitSig", submit_req_body);
+        let submit_resp = await aev.request_and_sign("/api/setPollCategory", request);
 
         return submit_resp.ok;
     }
 
     async function updateAuthorCategory(author, category) {
-        if (!logged_in) return false;
-
-        let logger = sk.cl();
-
-        // message formation
-
-        let action_req_body = {
+        let request = {
             account: author,
-            category: category,
-            address: address
+            category: category
         };
-        let action_resp = await post_json("/api/setAccountCategory/formMessage", action_req_body);
-        if (!action_resp.ok) return false;
 
-        let ts = action_resp.body.timestamp;
-        let nonce = action_resp.body.nonce;
-        let message = action_resp.body.message;
-
-        // sign message
-
-        let sign_result = await sign_message(logger, message);
-        if (!sign_result.ok) return false;
-
-        let signature = sign_result.result.signature;
-
-        // submit signature
-
-        let submit_req_body = {
-            account: author,
-            category: category,
-            address: address,
-            timestamp: ts,
-            nonce: nonce,
-            message_signature: signature
-        };
-        let submit_resp = await post_json("/api/setAccountCategory/submitSig", submit_req_body);
+        let submit_resp = await aev.request_and_sign("/api/setAccountCategory", request);
 
         return submit_resp.ok;
     }
 
     async function updatePermissions(author, permission_level) {
-        if (!logged_in) return false;
-
-        let logger = sk.cl();
-
-        // message formation
-
-        let action_req_body = {
+        let request = {
             account: author,
-            permission_level: permission_level,
-            address: address
+            permission_level: permission_level
         };
-        let action_resp = await post_json("/api/setAccountPermissions/formMessage", action_req_body);
-        if (!action_resp.ok) return false;
 
-        let ts = action_resp.body.timestamp;
-        let nonce = action_resp.body.nonce;
-        let message = action_resp.body.message;
-
-        // sign message
-
-        let sign_result = await sign_message(logger, message);
-        if (!sign_result.ok) return false;
-
-        let signature = sign_result.result.signature;
-
-        // submit signature
-
-        let submit_req_body = {
-            account: author,
-            permission_level: permission_level,
-            address: address,
-            timestamp: ts,
-            nonce: nonce,
-            message_signature: signature
-        };
-        let submit_resp = await post_json("/api/setAccountPermissions/submitSig", submit_req_body);
+        let submit_resp = await aev.request_and_sign("/api/setAccountPermissions", request);
 
         return submit_resp.ok;
     }
@@ -501,7 +339,7 @@
     async function updatePolls() {
         let login_button = document.getElementById("login_button");
         login_button.innerText = "Select account";
-        login_button.onclick = login;
+        login_button.onclick = aev.login;
 
         let form = document.querySelector("form");
         form.addEventListener("submit", addNewUser);
