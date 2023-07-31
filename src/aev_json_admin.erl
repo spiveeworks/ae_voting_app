@@ -48,50 +48,55 @@ content_types_accepted(Req, State) ->
     {Accepted, Req, State}.
 
 handle_post(Req, State = filter_poll_form_message) ->
-    filter_poll_form_message(Req, State);
+    form_message(Req, State, fun filter_poll_convert/2,
+                 fun filter_poll_payload/1);
 handle_post(Req, State = filter_poll) ->
-    filter_poll(Req, State);
+    check_signature(Req, State, fun filter_poll_convert/2,
+                    fun filter_poll_payload/1, fun filter_poll/1);
 handle_post(Req, State = filter_account_form_message) ->
-    filter_account_form_message(Req, State);
+    form_message(Req, State, fun filter_account_convert/2,
+                 fun filter_account_payload/1);
 handle_post(Req, State = filter_account) ->
-    filter_account(Req, State);
+    check_signature(Req, State, fun filter_account_convert/2,
+                    fun filter_account_payload/1, fun filter_account/1);
 handle_post(Req, State = set_permissions_form_message) ->
-    set_permissions_form_message(Req, State);
+    form_message(Req, State, fun set_permissions_convert/2,
+                 fun set_permissions_payload/1);
 handle_post(Req, State = set_permissions) ->
-    set_permissions(Req, State).
+    check_signature(Req, State, fun set_permissions_convert/2,
+                    fun set_permissions_payload/1, fun set_permissions/1).
 
-%%%%%%%%%%%%%%%%%%%
-% Poll Categories
+%%%%%%%%%%%%%%%%%
+% Generic Logic
 
-filter_poll_form_message(Req0, State) ->
+form_message(Req0, State, Convert, FormPayload) ->
     case aev_json_parse:parse_req_body(Req0) of
-        {ok, #{<<"poll_id">> := Poll,
-               <<"category">> := Category,
-               <<"address">> := ID}, Req1} ->
-            case permissions:can_set_categories(ID) of
-                false -> {false, Req1, State};
-                true ->
-                    Payload = filter_poll_payload(Poll, Category),
-                    reply_message(Req1, State, Payload, ID)
+        {ok, A = #{<<"address">> := ID}, Req1} when is_map(A) ->
+            B = maps:remove(<<"address">>, A),
+            case Convert(ID, B) of
+                {ok, C} ->
+                    Payload = FormPayload(C),
+                    reply_message(Req1, State, Payload, ID);
+                error ->
+                    {false, Req1, State}
             end;
-        {ok, Body, Req1} ->
-            io:format("Invalid data received: ~p~n", [Body]),
+        {ok, A, Req1} ->
+            io:format("Invalide data received: ~p~n", [A]),
             {false, Req1, State};
         {error, Req1} ->
             io:format("Failure.~n", []),
             {false, Req1, State}
     end.
 
-filter_poll(Req0, State) ->
+check_signature(Req0, State, Convert, FormPayload, Action) ->
     case aev_json_parse:parse_req_body(Req0) of
-        {ok, #{<<"poll_id">> := Poll,
-               <<"category">> := Category,
-               <<"address">> := ID,
-               <<"timestamp">> := Timestamp,
-               <<"nonce">> := Nonce,
-               <<"message_signature">> := Signature}, Req1} ->
-            filter_poll2(Req1, State, Poll, Category, ID, Timestamp, Nonce,
-                         Signature);
+        {ok, A = #{<<"address">> := ID,
+                   <<"timestamp">> := Timestamp,
+                   <<"nonce">> := Nonce,
+                   <<"message_signature">> := Signature}, Req1} ->
+            B = maps:without([<<"address">>, <<"timestamp">>, <<"nonce">>, <<"message_signature">>], A),
+            check_signature2(Req1, State, Convert, FormPayload, Action, ID,
+                             Timestamp, Nonce, Signature, B);
         {ok, Body, Req1} ->
             io:format("Invalid data received: ~p~n", [Body]),
             {false, Req1, State};
@@ -100,191 +105,28 @@ filter_poll(Req0, State) ->
             {false, Req1, State}
     end.
 
-filter_poll2(Req0, State, Poll, CategoryName, ID, Timestamp, Nonce, Signature) ->
-    case CategoryName of
-        <<"default">> ->
-            filter_poll_remove(Req0, State, Poll, ID,
-                               Timestamp, Nonce, Signature);
-        _ ->
-            filter_poll3(Req0, State, Poll, CategoryName, ID, Timestamp, Nonce,
-                         Signature)
-    end.
-
-% TODO: we could combine these commands together a little, since they are quite
-%       redundant
-% TODO: we could move this stuff over to admin_ops.erl once all the pieces have
-%       been decoded
-filter_poll3(Req0, State, Poll, CategoryName, ID, Timestamp, Nonce, Signature) ->
-    case aev_category_names:to_id(CategoryName) of
-        {ok, Category} ->
-            filter_poll4(Req0, State, Poll, CategoryName, Category, ID,
-                         Timestamp, Nonce, Signature);
+check_signature2(Req, State, Convert, FormPayload, Action, ID,
+                 Timestamp, Nonce, Signature, B) ->
+    case Convert(ID, B) of
+        {ok, C} ->
+            Payload = FormPayload(C),
+            check_signature3(Req, State, Action, ID, Timestamp, Nonce,
+                             Signature, C, Payload);
         error ->
-            {false, Req0, State}
+            {false, Req, State}
     end.
 
-filter_poll_remove(Req0, State, Poll, ID, Timestamp, Nonce, Signature) ->
-    Message = filter_poll_payload(Poll, "default"),
-    case aev_auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
+check_signature3(Req0, State, Action, ID, Timestamp, Nonce,
+                 Signature, C, Payload) ->
+    case aev_auth:verify_sig(Payload, ID, Timestamp, Nonce, Signature) of
         ok ->
-            poll_keeper:filter_poll_remove(Poll),
-            Req1 = cowboy_req:set_resp_body("{}", Req0),
+            Result = Action(C),
+            Data = zj:encode(Result),
+            Req1 = cowboy_req:set_resp_body(Data, Req0),
             {true, Req1, State};
         error ->
             {false, Req0, State}
     end.
-
-filter_poll4(Req0, State, Poll, CategoryName, Category, ID, Timestamp, Nonce, Signature) ->
-    Message = filter_poll_payload(Poll, CategoryName),
-    case aev_auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
-        ok ->
-            poll_keeper:filter_poll(Poll, Category),
-            Req1 = cowboy_req:set_resp_body("{}", Req0),
-            {true, Req1, State};
-        error ->
-            {false, Req0, State}
-    end.
-
-filter_poll_payload(PollIndex, Category) ->
-    {ok, PollID} = poll_keeper:get_poll_address(PollIndex),
-    % There might be a slight risk that two different poll sites will give the
-    % same nonce for the same poll address, and that the user will categorise a
-    % poll on one site, and that signature gets used to sign a transaction on a
-    % different site??? But that's not a big deal when we are just filtering
-    % polls, lol.
-    Txt = io_lib:format("set category of poll ~s to ~s", [PollID, Category]),
-    unicode:characters_to_list(Txt).
-
-%%%%%%%%%%%%%%%%%%%%%%
-% Account Categories
-
-filter_account_form_message(Req0, State) ->
-    case aev_json_parse:parse_req_body(Req0) of
-        {ok, #{<<"account">> := Account,
-               <<"category">> := Category,
-               <<"address">> := ID}, Req1} ->
-            case permissions:can_set_categories(ID) of
-                false -> {false, Req1, State};
-                true ->
-                    Payload = filter_account_payload(Account, Category),
-                    reply_message(Req1, State, Payload, ID)
-            end;
-        {ok, Body, Req1} ->
-            io:format("Invalid data received: ~p~n", [Body]),
-            {false, Req1, State};
-        {error, Req1} ->
-            io:format("Failure.~n", []),
-            {false, Req1, State}
-    end.
-
-filter_account(Req0, State) ->
-    case aev_json_parse:parse_req_body(Req0) of
-        {ok, #{<<"account">> := Account,
-               <<"category">> := Category,
-               <<"address">> := ID,
-               <<"timestamp">> := Timestamp,
-               <<"nonce">> := Nonce,
-               <<"message_signature">> := Signature}, Req1} ->
-            filter_account2(Req1, State, Account, Category, ID, Timestamp, Nonce,
-                         Signature);
-        {ok, Body, Req1} ->
-            io:format("Invalid data received: ~p~n", [Body]),
-            {false, Req1, State};
-        {error, Req1} ->
-            io:format("Failure.~n", []),
-            {false, Req1, State}
-    end.
-
-filter_account2(Req0, State, Account, CategoryName, ID, Timestamp, Nonce, Signature) ->
-    case aev_category_names:to_id(CategoryName) of
-        {ok, Category} ->
-            filter_account3(Req0, State, Account, CategoryName, Category, ID,
-                         Timestamp, Nonce, Signature);
-        error ->
-            {false, Req0, State}
-    end.
-
-filter_account3(Req0, State, Account, CategoryName, Category, ID, Timestamp, Nonce, Signature) ->
-    Message = filter_account_payload(Account, CategoryName),
-    case aev_auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
-        ok ->
-            poll_keeper:filter_account(Account, Category),
-            Req1 = cowboy_req:set_resp_body("{}", Req0),
-            {true, Req1, State};
-        error ->
-            {false, Req0, State}
-    end.
-
-filter_account_payload(Account, Category) ->
-    Txt = io_lib:format("set category of account ~s to ~s", [Account, Category]),
-    unicode:characters_to_list(Txt).
-
-%%%%%%%%%%%%%%%%%%%%%%%
-% Account Permissions
-
-set_permissions_form_message(Req0, State) ->
-    case aev_json_parse:parse_req_body(Req0) of
-        {ok, #{<<"account">> := Account,
-               <<"permission_level">> := PermissionLevel,
-               <<"address">> := ID}, Req1} ->
-            case permissions:can_change_permissions(ID) of
-                false -> {false, Req1, State};
-                true ->
-                    Payload = set_permissions_payload(Account, PermissionLevel),
-                    reply_message(Req1, State, Payload, ID)
-            end;
-        {ok, Body, Req1} ->
-            io:format("Invalid data received: ~p~n", [Body]),
-            {false, Req1, State};
-        {error, Req1} ->
-            io:format("Failure.~n", []),
-            {false, Req1, State}
-    end.
-
-set_permissions(Req0, State) ->
-    case aev_json_parse:parse_req_body(Req0) of
-        {ok, #{<<"account">> := Account,
-               <<"permission_level">> := PermissionLevel,
-               <<"address">> := ID,
-               <<"timestamp">> := Timestamp,
-               <<"nonce">> := Nonce,
-               <<"message_signature">> := Signature}, Req1} ->
-            set_permissions2(Req1, State, Account, PermissionLevel, ID, Timestamp, Nonce,
-                         Signature);
-        {ok, Body, Req1} ->
-            io:format("Invalid data received: ~p~n", [Body]),
-            {false, Req1, State};
-        {error, Req1} ->
-            io:format("Failure.~n", []),
-            {false, Req1, State}
-    end.
-
-set_permissions2(Req0, State, Account, PermissionLevelName, ID, Timestamp, Nonce, Signature) ->
-    case aev_category_names:permissions_to_id(PermissionLevelName) of
-        {ok, PermissionLevel} ->
-            set_permissions3(Req0, State, Account, PermissionLevelName,
-                             PermissionLevel, ID, Timestamp, Nonce, Signature);
-        error ->
-            {false, Req0, State}
-    end.
-
-set_permissions3(Req0, State, Account, PermissionLevelName, PermissionLevel, ID, Timestamp, Nonce, Signature) ->
-    Message = set_permissions_payload(Account, PermissionLevelName),
-    case aev_auth:verify_sig(Message, ID, Timestamp, Nonce, Signature) of
-        ok ->
-            permissions:set(Account, PermissionLevel),
-            Req1 = cowboy_req:set_resp_body("{}", Req0),
-            {true, Req1, State};
-        error ->
-            {false, Req0, State}
-    end.
-
-set_permissions_payload(Account, PermissionLevel) ->
-    Txt = io_lib:format("set permission level of account ~s to ~s", [Account, PermissionLevel]),
-    unicode:characters_to_list(Txt).
-
-%%%%%%%%%%
-% Common
 
 reply_message(Req0, State, Payload, ID) ->
     {ok, Timestamp, Nonce, Message} = aev_auth:start_auth(Payload, ID, ttl()),
@@ -294,4 +136,108 @@ reply_message(Req0, State, Payload, ID) ->
 
 ttl() ->
     60000.
+
+%%%%%%%%%%%%%%%%%%%
+% Poll Categories
+
+filter_poll_convert(ID, Body) ->
+    case Body of
+        #{<<"poll_id">> := Poll,
+          <<"category">> := Category} ->
+            case permissions:can_set_categories(ID) of
+                false -> error;
+                true ->
+                    case Category of
+                        <<"default">> ->
+                            {ok, {Poll, Category, none}};
+                        _ ->
+                            case aev_category_names:to_id(Category) of
+                                {ok, CategoryID} ->
+                                    {ok, {Poll, Category, CategoryID}};
+                                error ->
+                                    error
+                            end
+                    end
+            end;
+        _ ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            error
+    end.
+
+filter_poll_payload({PollIndex, Category, _}) ->
+    {ok, PollID} = poll_keeper:get_poll_address(PollIndex),
+    % There might be a slight risk that two different poll sites will give the
+    % same nonce for the same poll address, and that the user will categorise a
+    % poll on one site, and that signature gets used to sign a transaction on a
+    % different site??? But that's not a big deal when we are just filtering
+    % polls, lol.
+    Txt = io_lib:format("set category of poll ~s to ~s", [PollID, Category]),
+    unicode:characters_to_list(Txt).
+
+filter_poll({Poll, <<"default">>, _}) ->
+    poll_keeper:filter_poll_remove(Poll),
+    #{};
+filter_poll({Poll, _, CategoryID}) ->
+    poll_keeper:filter_poll(Poll, CategoryID),
+    #{}.
+
+%%%%%%%%%%%%%%%%%%%%%%
+% Account Categories
+
+filter_account_convert(ID, Body) ->
+    case Body of
+        #{<<"account">> := Account,
+          <<"category">> := Category} ->
+            case permissions:can_set_categories(ID) of
+                false -> error;
+                true ->
+                    case aev_category_names:to_id(Category) of
+                        {ok, CategoryID} ->
+                            {ok, {Account, Category, CategoryID}};
+                        error ->
+                            error
+                    end
+            end;
+        _ ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            error
+    end.
+
+filter_account_payload({Account, Category, _}) ->
+    Txt = io_lib:format("set category of account ~s to ~s", [Account, Category]),
+    unicode:characters_to_list(Txt).
+
+filter_account({Account, _, CategoryID}) ->
+    poll_keeper:filter_account(Account, CategoryID),
+    #{}.
+
+%%%%%%%%%%%%%%%%%%%%%%%
+% Account Permissions
+
+set_permissions_convert(ID, Body) ->
+    case Body of
+        #{<<"account">> := Account,
+          <<"permission_level">> := PermissionLevelName} ->
+            case permissions:can_change_permissions(ID) of
+                false -> error;
+                true ->
+                    case aev_category_names:permissions_to_id(PermissionLevelName) of
+                        {ok, PermissionLevel} ->
+                            {ok, {Account, PermissionLevelName, PermissionLevel}};
+                        error ->
+                            error
+                    end
+            end;
+        _ ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            error
+    end.
+
+set_permissions_payload({Account, PermissionLevel, _}) ->
+    Txt = io_lib:format("set permission level of account ~s to ~s", [Account, PermissionLevel]),
+    unicode:characters_to_list(Txt).
+
+set_permissions({Account, _, PermissionLevel}) ->
+    permissions:set(Account, PermissionLevel),
+    #{}.
 
