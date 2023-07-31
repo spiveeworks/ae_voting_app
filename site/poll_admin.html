@@ -6,6 +6,8 @@
     import * as sk from "/sidekick.js";
     import * as aev from "/aev_util.js";
 
+    var settings_loaded = false;
+
     // cache of poll categories
     var poll_categories = {};
     window.poll_categories = poll_categories;
@@ -16,17 +18,44 @@
     var permissions = {};
     window.permissions = permissions;
 
-    function sign_message(logger, message) {
-        let promise = sk.msg_sign(
-            'ske-msg_sign-1',
-            aev.address,
-            message,
-            sk.TIMEOUT_DEF_MSG_SIGN_MS,
-            'sign message timed out',
-            logger
-        );
+    async function get_polls() {
+        let polls_string = await fetch("/api/getPolls?category=hidden");
+        let polls = await polls_string.json();
+        return polls;
+    }
 
-        return promise;
+    async function login() {
+        let login_success = await aev.login();
+        if (!login_success) return;
+
+        if (!settings_loaded) {
+            // get polls in the background, while we do the slow request
+            // signing stuff that might fail
+            let polls_promise = get_polls();
+
+            let submit_resp = await aev.request_and_sign("/api/getSettings", {});
+            if (submit_resp.ok) {
+                let settings = submit_resp.body;
+
+                poll_categories = settings.poll_categories;
+                window.poll_categories = poll_categories;
+
+                author_categories = settings.account_categories;
+                window.author_categories = author_categories;
+
+                permissions = settings.account_permissions;
+                window.permissions = permissions;
+
+                let polls = await polls_promise;
+
+                // flag to make sure we don't add to the tables twice
+                settings_loaded = true;
+
+                generatePollTable(polls.polls);
+
+                generateAuthorTable();
+            }
+        }
     }
 
     async function updatePollCategory(poll_id, category) {
@@ -240,7 +269,7 @@
            .appendChild(pbutton);
     }
 
-    function generateAuthorTable(data, permissions) {
+    function generateAuthorTable() {
         let table = document.getElementById("author_table");
 
         for (let [author, category] of Object.entries(author_categories)) {
@@ -339,29 +368,10 @@
     async function updatePolls() {
         let login_button = document.getElementById("login_button");
         login_button.innerText = "Select account";
-        login_button.onclick = aev.login;
+        login_button.onclick = login;
 
         let form = document.querySelector("form");
         form.addEventListener("submit", addNewUser);
-
-        let polls_string = await fetch("/api/getPolls?category=hidden");
-        let polls = await polls_string.json();
-        let settings_string = await fetch("/api/categorySettings");
-        let settings = await settings_string.json();
-        let permissions_string = await fetch("/api/permissionSettings");
-        permissions = await permissions_string.json();
-
-        poll_categories = settings.poll_categories;
-        window.poll_categories = poll_categories;
-
-        author_categories = settings.account_categories;
-        window.author_categories = author_categories;
-
-        window.permissions = permissions;
-
-        generatePollTable(polls.polls);
-
-        generateAuthorTable(polls.polls, permissions);
     }
 
     window.onload = updatePolls;

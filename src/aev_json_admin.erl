@@ -2,15 +2,11 @@
 -behavior(cowboy_handler).
 
 -export([init/2, allowed_methods/2]).
--export([content_types_provided/2, content_types_accepted/2, handle_get/2, handle_post/2]).
+-export([content_types_provided/2, content_types_accepted/2, handle_post/2]).
 
 init(Req, State) ->
     {cowboy_rest, Req, State}.
 
-allowed_methods(Req, State = get_filters) ->
-    {[<<"GET">>, <<"OPTIONS">>], Req, State};
-allowed_methods(Req, State = get_permissions) ->
-    {[<<"GET">>, <<"OPTIONS">>], Req, State};
 allowed_methods(Req, State) ->
     {[<<"POST">>, <<"OPTIONS">>], Req, State}.
 
@@ -20,33 +16,18 @@ content_types_provided(Req, State) ->
     ],
     {Accepted, Req, State}.
 
-handle_get(Req, State = get_filters) ->
-    {AF, CF} = poll_keeper:get_filters(),
-    AFNamed = maps:map(fun map_id_to_name/2, AF),
-    CFNamed = maps:map(fun map_id_to_name/2, CF),
-    Data = zj:encode(#{account_categories => AFNamed,
-                       poll_categories => CFNamed}),
-    {Data, Req, State};
-handle_get(Req, State = get_permissions) ->
-    Permissions = permissions:get_all(),
-    PermissionsNamed = maps:map(fun map_permission_id_to_name/2, Permissions),
-    Data = zj:encode(PermissionsNamed),
-    {Data, Req, State}.
-
-map_id_to_name(_, default) ->
-    default;
-map_id_to_name(_, ID) ->
-    aev_category_names:from_id(ID).
-
-map_permission_id_to_name(_, ID) ->
-    aev_category_names:permissions_from_id(ID).
-
 content_types_accepted(Req, State) ->
     Accepted = [
         {{<<"application">>, <<"json">>, '*'}, handle_post}
     ],
     {Accepted, Req, State}.
 
+handle_post(Req, State = get_settings_form_message) ->
+    form_message(Req, State, fun get_settings_convert/2,
+                 fun get_settings_payload/1);
+handle_post(Req, State = get_settings) ->
+    check_signature(Req, State, fun get_settings_convert/2,
+                    fun get_settings_payload/1, fun get_settings/1);
 handle_post(Req, State = filter_poll_form_message) ->
     form_message(Req, State, fun filter_poll_convert/2,
                  fun filter_poll_payload/1);
@@ -137,9 +118,44 @@ reply_message(Req0, State, Payload, ID) ->
 ttl() ->
     60000.
 
+%%%%%%%%%%%%%%%%%%%%
+% Setting Fetching
+
+get_settings_convert(ID, Body) when Body == #{} ->
+    case permissions:can_set_categories(ID) of
+        true -> {ok, {}};
+        false -> error
+    end;
+get_settings_convert(_, _) ->
+    error.
+
+get_settings_payload(_) ->
+    "view poll and account settings".
+
+get_settings(_) ->
+    {AF, CF} = poll_keeper:get_filters(),
+    AFNamed = maps:map(fun map_id_to_name/2, AF),
+    CFNamed = maps:map(fun map_id_to_name/2, CF),
+
+    Permissions = permissions:get_all(),
+    PermissionsNamed = maps:map(fun map_permission_id_to_name/2, Permissions),
+
+    #{poll_categories => CFNamed,
+      account_categories => AFNamed,
+      account_permissions => PermissionsNamed}.
+
+map_id_to_name(_, default) ->
+    default;
+map_id_to_name(_, ID) ->
+    aev_category_names:from_id(ID).
+
+map_permission_id_to_name(_, ID) ->
+    aev_category_names:permissions_from_id(ID).
+
 %%%%%%%%%%%%%%%%%%%
 % Poll Categories
 
+% TODO: check that nothing else is in the map?
 filter_poll_convert(ID, Body) ->
     case Body of
         #{<<"poll_id">> := Poll,
