@@ -1,1 +1,1 @@
-#{account_filters => #{},contract_filters => #{}}.
+#{contract_filters => #{},account_filters => #{}}.

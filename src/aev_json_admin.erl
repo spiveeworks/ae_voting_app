@@ -155,25 +155,30 @@ map_permission_id_to_name(_, ID) ->
 %%%%%%%%%%%%%%%%%%%
 % Poll Categories
 
-% TODO: check that nothing else is in the map?
 filter_poll_convert(ID, Body) ->
     case Body of
         #{<<"poll_id">> := Poll,
           <<"category">> := Category} ->
-            case permissions:can_set_categories(ID) of
-                false -> error;
+            case maps:without([<<"poll_id">>, <<"category">>], Body) == #{} of
                 true ->
-                    case Category of
-                        <<"default">> ->
-                            {ok, {Poll, Category, none}};
-                        _ ->
-                            case aev_category_names:to_id(Category) of
-                                {ok, CategoryID} ->
-                                    {ok, {Poll, Category, CategoryID}};
-                                error ->
-                                    error
+                    case permissions:can_set_categories(ID) of
+                        false -> error;
+                        true ->
+                            case Category of
+                                <<"default">> ->
+                                    {ok, {Poll, Category, none}};
+                                _ ->
+                                    case aev_category_names:to_id(Category) of
+                                        {ok, CategoryID} ->
+                                            {ok, {Poll, Category, CategoryID}};
+                                        error ->
+                                            error
+                                    end
                             end
-                    end
+                    end;
+                false ->
+                    io:format("Invalid data received: ~p~n", [Body]),
+                    error
             end;
         _ ->
             io:format("Invalid data received: ~p~n", [Body]),
@@ -204,15 +209,21 @@ filter_account_convert(ID, Body) ->
     case Body of
         #{<<"account">> := Account,
           <<"category">> := Category} ->
-            case permissions:can_set_categories(ID) of
-                false -> error;
+            case maps:without([<<"account">>, <<"category">>], Body) == #{} of
                 true ->
-                    case aev_category_names:to_id(Category) of
-                        {ok, CategoryID} ->
-                            {ok, {Account, Category, CategoryID}};
-                        error ->
-                            error
-                    end
+                    case permissions:can_set_categories(ID) of
+                        false -> error;
+                        true ->
+                            case aev_category_names:to_id(Category) of
+                                {ok, CategoryID} ->
+                                    {ok, {Account, Category, CategoryID}};
+                                error ->
+                                    error
+                            end
+                    end;
+                false ->
+                    io:format("Invalid data received: ~p~n", [Body]),
+                    error
             end;
         _ ->
             io:format("Invalid data received: ~p~n", [Body]),
@@ -234,15 +245,21 @@ set_permissions_convert(ID, Body) ->
     case Body of
         #{<<"account">> := Account,
           <<"permission_level">> := PermissionLevelName} ->
-            case permissions:can_change_permissions(ID) of
-                false -> error;
+            case maps:without([<<"account">>, <<"permission_level">>], Body) == #{} of
                 true ->
-                    case aev_category_names:permissions_to_id(PermissionLevelName) of
-                        {ok, PermissionLevel} ->
-                            {ok, {Account, PermissionLevelName, PermissionLevel}};
-                        error ->
-                            error
-                    end
+                    case permissions:can_change_permissions(ID) of
+                        false -> error;
+                        true ->
+                            case aev_category_names:permissions_to_id(PermissionLevelName) of
+                                {ok, PermissionLevel} ->
+                                    {ok, {Account, PermissionLevelName, PermissionLevel}};
+                                error ->
+                                    error
+                            end
+                    end;
+                false ->
+                    io:format("Invalid data received: ~p~n", [Body]),
+                    error
             end;
         _ ->
             io:format("Invalid data received: ~p~n", [Body]),
