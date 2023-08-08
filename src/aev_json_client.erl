@@ -101,6 +101,8 @@ post_revoke_vote_tx(Req0, State) ->
 post_vote_tx2(Req0, State, ID, Poll, Option, SignedTX) ->
     case vanillae:post_tx(SignedTX) of
         {ok, #{"tx_hash" := TH}} ->
+            % TODO: make the poll keeper actually check that the transaction
+            % that was posted resulted in the state we think it does?
             poll_keeper:track_vote(ID, Poll, Option, TH),
             Data = zj:encode(#{}),
             Req1 = cowboy_req:set_resp_body(Data, Req0),

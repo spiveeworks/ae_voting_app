@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<script type="module">
+    import * as sk from "../sidekick.js";
+    import * as aev from "/aev_util.js";
+
+    function removeOption(event) {
+        let button = event.target;
+
+        let table = document.getElementById("option_table");
+        let rows = table.rows;
+        for (var i = 0; i < rows.length; i++) {
+            let this_button = rows[i].cells[2].children[0];
+            if (button == this_button) { // double equals, yolo
+                table.deleteRow(i);
+                for (var j = i; j < rows.length; j++) {
+                    let option_text = rows[j].cells[0];
+                    option_text.innerText = j;
+                }
+            }
+        }
+
+        if (rows.length <= 3) {
+            // There's no point having a poll with fewer than two options, so disable the remove buttons.
+            for (var i = 1; i < rows.length; i++) {
+                rows[i].cells[2].children[0].disabled = true;
+            }
+        }
+    }
+
+    function addOption(event) {
+        let table = document.getElementById("option_table");
+
+        let nextIndex = table.rows.length;
+        let row = table.insertRow();
+
+        row.insertCell()
+           .appendChild(document.createTextNode(nextIndex));
+
+        let input = document.createElement("input");
+        input.type = "text";
+        row.insertCell().appendChild(input);
+
+        let remove = document.createElement("button");
+        remove.addEventListener("click", removeOption);
+        remove.innerText = "remove";
+        row.insertCell().appendChild(remove);
+
+        for (var i = 0; i < table.rows.length; i++) {
+            table.rows[i].cells[2].children[0].disabled = false;
+        }
+    }
+
+    async function createPoll(event) {
+        let form = event.target;
+        let title = form[0].value;
+        let description = form[1].value;
+        let url = form[2].value;
+
+        let lifetime;
+        if (form[3].checked) {
+            lifetime = form[4].value;
+        } else {
+            lifetime = "never_closes";
+        }
+
+        let options = [];
+        let rows = form.children[1].rows;
+        for (var i = 1; i < rows.length; i++) {
+            let option_name = rows[i].cells[1].children[0].value;
+            options.push(option_name);
+        }
+
+        let request = {
+            title: title,
+            description: description,
+            url: url,
+            lifetime: lifetime,
+            options: options
+        };
+
+        let post_resp = await aev.form_and_post("/api/createPoll", request);
+        console.log(post_resp);
+    }
+
+    async function updateButtons() {
+        let login_button = document.getElementById("login_button");
+        login_button.innerText = "Select account";
+        login_button.onclick = aev.login;
+
+        let form = document.querySelector("form");
+        form.addEventListener("submit", createPoll);
+
+        let add_option_button = document.getElementById("add_option_button");
+        add_option_button.addEventListener("click", addOption);
+
+        let option_table = document.getElementById("option_table");
+        for (var i = 1; i < option_table.rows.length; i++) {
+            let remove_button = option_table.rows[i].cells[2].children[0];
+            remove_button.disabled = true;
+            remove_button.addEventListener("click", removeOption);
+        }
+    }
+
+    window.onload = updateButtons;
+    //setInterval(updateCounter, 1000);
+</script>
+
+<p id="login_status">No account selected.</p>
+
+<button id="login_button">Loading...</button>
+
+<h1>Create a New Poll</h1>
+
+<form onsubmit="return false;" accept-charset="utf-8">
+    <table>
+    <tr>
+        <th>Field</th>
+        <th>Value</th>
+    </tr>
+    <tr>
+        <td>Title</td>
+        <td>
+            <input type="text" name="title"/>
+        </td>
+    </tr>
+    <tr>
+        <td>Description</td>
+        <td>
+            <input type="text" name="description"/>
+        </td>
+    </tr>
+    <tr>
+        <td>URL</td>
+        <td>
+            <input type="text" name="url"/>
+        </td>
+    </tr>
+    <tr>
+        <td>Closes?</td>
+        <td>
+            <input type="checkbox" name="closes"/>
+        </td>
+    </tr>
+    <tr>
+        <td>Lifetime (blocks)</td>
+        <td>
+            <input type="number" name="lifetime"/>
+        </td>
+    </tr>
+    </table>
+
+    <table id="option_table">
+    <tr>
+        <th>Option</th>
+        <th>Name</th>
+        <td><button id="add_option_button">add option</button></td>
+    </tr>
+    <tr>
+        <td>1</td>
+        <td>
+            <input type="text"/>
+        </td>
+        <td><button disabled="true">remove</button></td>
+    </tr>
+    <tr>
+        <td>2</td>
+        <td>
+            <input type="text"/>
+        </td>
+        <td><button disabled="true">remove</button></td>
+    </tr>
+    </table>
+
+    <input type="submit" value="Create"/>
+</form>
+</body>
+</html>
+

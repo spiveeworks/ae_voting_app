@@ -13,6 +13,7 @@ start(_Type, _Args) ->
             {"/[polls]", cowboy_static, {file, "site/index.html"}},
             {"/polls/:id", [{id, int}], cowboy_static, {file, "site/show_poll.html"}},
             {"/polls/admin", cowboy_static, {file, "site/poll_admin.html"}},
+            {"/polls/create", cowboy_static, {file, "site/create_poll.html"}},
             {"/counter", cowboy_static, {file, "site/counter.html"}},
             {"/sidekick.js", cowboy_static, {file, "site/sidekick.js"}},
             {"/sidekick.js.map", cowboy_static, {file, "site/sidekick.js.map"}},
@@ -34,7 +35,10 @@ start(_Type, _Args) ->
             {"/api/setAccountCategory/formMessage", aev_json_admin, filter_account_form_message},
             {"/api/setAccountCategory/submitSig", aev_json_admin, filter_account},
             {"/api/setAccountPermissions/formMessage", aev_json_admin, set_permissions_form_message},
-            {"/api/setAccountPermissions/submitSig", aev_json_admin, set_permissions}
+            {"/api/setAccountPermissions/submitSig", aev_json_admin, set_permissions},
+
+            {"/api/createPoll/formTransaction", aev_json_admin, form_poll_tx},
+            {"/api/createPoll/postTransaction", aev_json_admin, post_poll_tx}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

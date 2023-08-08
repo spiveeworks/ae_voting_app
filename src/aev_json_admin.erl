@@ -45,7 +45,11 @@ handle_post(Req, State = set_permissions_form_message) ->
                  fun set_permissions_payload/1);
 handle_post(Req, State = set_permissions) ->
     check_signature(Req, State, fun set_permissions_convert/2,
-                    fun set_permissions_payload/1, fun set_permissions/1).
+                    fun set_permissions_payload/1, fun set_permissions/1);
+handle_post(Req, State = form_poll_tx) ->
+    form_poll_tx(Req, State);
+handle_post(Req, State = post_poll_tx) ->
+    post_poll_tx(Req, State).
 
 %%%%%%%%%%%%%%%%%
 % Generic Logic
@@ -62,7 +66,7 @@ form_message(Req0, State, Convert, FormPayload) ->
                     {false, Req1, State}
             end;
         {ok, A, Req1} ->
-            io:format("Invalide data received: ~p~n", [A]),
+            io:format("Invalid data received: ~p~n", [A]),
             {false, Req1, State};
         {error, Req1} ->
             io:format("Failure.~n", []),
@@ -273,4 +277,81 @@ set_permissions_payload({Account, PermissionLevel, _}) ->
 set_permissions({Account, _, PermissionLevel}) ->
     permissions:set(Account, PermissionLevel),
     #{}.
+
+%%%%%%%%%%%%%%%%%
+% Poll Creation
+
+form_poll_tx(Req0, State) ->
+    case aev_json_parse:parse_req_body(Req0) of
+        {ok, #{<<"title">> := Title,
+               <<"description">> := Description,
+               <<"url">> := URL,
+               <<"lifetime">> := Lifetime,
+               <<"options">> := Options,
+               <<"address">> := ID}, Req1} ->
+            form_poll_tx2(Req1, State, ID, Title, Description, URL, Lifetime,
+                          Options);
+        {ok, Body, Req1} ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            {false, Req1, State};
+        {error, Req1} ->
+            io:format("Failure.~n", []),
+            {false, Req1, State}
+    end.
+
+form_poll_tx2(Req0, State, ID, Title, Description, URL, LifetimeBinary, OptionsList) ->
+    Options = list_to_map(OptionsList),
+    SpecRef = none,
+    LifetimeList = unicode:characters_to_list(LifetimeBinary),
+    Lifetime = list_to_integer(LifetimeList),
+    case contract_man:create_poll(ID, Title, Description, URL, SpecRef, Options, Lifetime) of
+        {ok, TX} ->
+            Data = zj:encode(#{tx => TX}),
+            Req1 = cowboy_req:set_resp_body(Data, Req0),
+            {true, Req1, State};
+        {error, _} ->
+            {false, Req0, State}
+    end.
+
+list_to_map(List) ->
+    list_to_map(List, 1, #{}).
+
+list_to_map([Head | Tail], I, Map) ->
+    NewMap = maps:put(I, Head, Map),
+    list_to_map(Tail, I + 1, NewMap);
+list_to_map([], _, Map) ->
+    Map.
+
+post_poll_tx(Req0, State) ->
+    case aev_json_parse:parse_req_body(Req0) of
+        {ok, #{<<"title">> := Title,
+               <<"description">> := Description,
+               <<"url">> := URL,
+               <<"lifetime">> := Lifetime,
+               <<"options">> := Options,
+               <<"address">> := ID,
+               <<"signed_tx">> := SignedTX}, Req1} ->
+            post_poll_tx2(Req1, State, ID, Title, Description, URL, Lifetime,
+                          Options, SignedTX);
+        {ok, Body, Req1} ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            {false, Req1, State};
+        {error, Req1} ->
+            io:format("Failure.~n", []),
+            {false, Req1, State}
+    end.
+
+post_poll_tx2(Req0, State, _ID, _Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX) ->
+    case vanillae:post_tx(SignedTX) of
+        {ok, #{"tx_hash" := TH}} ->
+            % Track the poll somewhere? In a buffer of unregistered polls?
+            Data = zj:encode(#{"tx_hash" => TH}),
+            Req1 = cowboy_req:set_resp_body(Data, Req0),
+            {true, Req1, State};
+        Error ->
+            io:format("post_tx failed with ~p~n", [Error]),
+            {false, Req0, State}
+    end.
+
+% Encode a list of all polls
 
