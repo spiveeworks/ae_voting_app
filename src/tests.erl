@@ -191,6 +191,11 @@ run_tests() ->
 
     %PollID = 9,
 
+    {ok, Hash} = create_poll_contract(),
+    incubator:add_poll_hash("Test Poll", Hash),
+
+    State = incubator:get_state(),
+    io:format("State: ~p~n", [State]),
     %vote_poll_wait(PollID, 1),
     %{ok, PollAfter1} = poll_keeper:get_poll(PollID),
     %io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter1)]),

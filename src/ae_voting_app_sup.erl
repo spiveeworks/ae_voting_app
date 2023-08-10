@@ -23,6 +23,13 @@ init([]) ->
             start => {query_man, start_link, []}
         },
 
+        % Maybe this should go after poll_keeper, but it is easier to test if
+        % it comes before.
+        #{
+            id => incubator,
+            start => {incubator, start_link, []}
+        },
+
         #{
             id => poll_keeper,
             start => {poll_keeper, start_link, []}
