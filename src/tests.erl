@@ -95,17 +95,16 @@ add_poll_to_registry(RegistryContract, PollContract) ->
 
     {ok, {ResultType, TX}} = contract_man:register_poll(ID, RegistryContract,
                                                         PollContract, true),
+    io:format("Result type: ~p~n", [ResultType]),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, TX),
 
-    query_man:post_tx_result(self(), "add poll", ResultType, SignedTX),
-    {ok, PollIndex} = receive
-                          {subscribe_tx, "add poll", A} -> A
-                      end,
+    {ok, Result} = vanillae:post_tx(SignedTX),
+    #{"tx_hash" := Hash} = Result,
 
-    io:format("Poll index ~p~n", [PollIndex]),
+    incubator:add_register_hash("Test Poll", PollContract, Hash),
 
-    PollIndex.
+    ok.
 
 adt_test() ->
     Key = get_key(),
@@ -122,6 +121,10 @@ adt_test() ->
 create_and_add_poll(RegistryID) ->
     {ok, Hash} = create_poll_contract(),
     io:format("~nTransaction hash: ~n~s~n", [Hash]),
+
+    incubator:add_poll_hash("Test Poll", Hash),
+    io:format("Incubator state: ~p~n", [incubator:get_state()]),
+
     query_man:subscribe_tx_contract(self(), "create poll", Hash),
     {ok, PollID} = receive
                        {subscribe_tx, "create poll", A} -> A
@@ -134,6 +137,7 @@ create_and_add_poll(RegistryID) ->
     io:format("Registry info:~n~p~n", [RegistryInfo]),
 
     add_poll_to_registry(RegistryID, PollID),
+    io:format("Incubator state: ~p~n", [incubator:get_state()]),
 
     ok.
 
@@ -187,15 +191,12 @@ run_tests() ->
     %RegistryID = create_registry_and_poll_parallel(),
     %create_and_add_poll(RegistryID),
 
-    %RegistryID = poll_keeper:get_registry_address(),
+    RegistryID = poll_keeper:get_registry_address(),
+
+    create_and_add_poll(RegistryID),
 
     %PollID = 9,
 
-    {ok, Hash} = create_poll_contract(),
-    incubator:add_poll_hash("Test Poll", Hash),
-
-    State = incubator:get_state(),
-    io:format("State: ~p~n", [State]),
     %vote_poll_wait(PollID, 1),
     %{ok, PollAfter1} = poll_keeper:get_poll(PollID),
     %io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter1)]),
