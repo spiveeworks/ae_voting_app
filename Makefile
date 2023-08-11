@@ -70,7 +70,7 @@ vpath %.erl $(patsubst %,deps/%/src,$(SIMPLE_DEPS)) deps/zx/zomp/lib/otpr/zx/0.1
 
 ebin/%.beam: %.erl | ebin
 	@echo Compiling $<
-	@export zx_include=. && erlc -I deps -I deps/cowlib/include -I deps/aebytecode/include -I deps/aeserialization/include -I deps/zx/zomp/lib/otpr/zx/0.12.7/include -o ebin -pa ebin $<
+	@export zx_include=. && erlc -I deps -I deps/cowlib/include -I deps/aebytecode/include -I deps/aeserialization/include -I deps/zx/zomp/lib/otpr/zx/0.12.7/include -I include -o ebin -pa ebin $<
 
 # aebytecode has some code generation that we will invoke directly.
 ebin/aeb_fate_asm.beam aeb_fate_code.beam: deps/aebytecode/include/aeb_fate_opcodes.hrl

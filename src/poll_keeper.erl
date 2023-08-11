@@ -91,7 +91,9 @@ init({}) ->
     spawn(tests, run_tests, []),
     {ok, [RegistryID]} = file:consult("registry_id"),
     {ok, Filters} = filters:load("filters"),
-    State = initial_state(RegistryID, Filters),
+    % Just make up some nonsense and use the full state once we have it.
+    State = dummy_state(RegistryID, Filters),
+    ground_truth:request_full_state(),
     io:format("Poll keeper created.~n", []),
     {ok, State}.
 
@@ -138,7 +140,10 @@ handle_info({subscribe_tx, {track_vote, PollIndex, ID, TH}, {ok, {}}}, State) ->
     {noreply, NewState};
 handle_info({subscribe_tx, {track_vote, _PollIndex, _ID, _TH}, {error, Reason}}, State) ->
     io:format("vote failed: ~p~n", [Reason]),
-    {noreply, State}.
+    {noreply, State};
+handle_info({ground_truth, Polls}, State) ->
+    NewState = do_ground_truth(Polls, State),
+    {noreply, NewState}.
 
 %%
 % Doers
@@ -177,7 +182,7 @@ do_get_user_status(PollIndex, IDRaw, State) ->
     end.
 
 do_get_user_status2(PollIndex, Poll, ID, State) ->
-    Current = case poll_lookup_user(ID, Poll) of
+    Current = case poll_state:poll_lookup_user(ID, Poll) of
                   [] -> none;
                   [OptionIndex] -> OptionIndex;
                   [OptionIndex | _] ->
@@ -207,9 +212,9 @@ do_track_vote_mined(PollIndex, ID, TH, State) ->
     State2 = State#pks{pending_votes = PendingVotes},
     case maps:find({PollIndex, ID}, State#pks.pending_votes) of
         {ok, {NewOption, TH}} ->
-            % TODO: let update_vote lookup the option itself, using
-            % Poll.voted_option(ID)
-            update_vote(PollIndex, ID, NewOption, State2);
+            NewPolls = poll_state:update_vote(PollIndex, ID, NewOption,
+                                              State2#pks.polls),
+            State2#pks{polls = NewPolls};
         _ ->
             io:format("Warning: Got subscribe_tx for a vote that was already "
                       "out of date.~n", []),
@@ -222,8 +227,8 @@ do_filter_poll(PollIndex, Category, State) ->
             % add the filter
             NewFilters = filters:set_contract_category(State#pks.filters, PollIndex, Category),
             filters:store(NewFilters, "filters"),
-            % build the new state
-            NewPollState = Poll#poll{category = Category},
+            % work out what the category is now
+            NewPollState = update_poll_category(NewFilters, PollIndex, Poll),
             NewPolls = maps:put(PollIndex, NewPollState, State#pks.polls),
             State#pks{polls = NewPolls, filters = NewFilters};
         error ->
@@ -237,9 +242,7 @@ do_filter_poll_remove(PollIndex, State) ->
             NewFilters = filters:reset_contract_category(State#pks.filters, PollIndex),
             filters:store(NewFilters, "filters"),
             % work out what the category is now
-            Category = filters:category(NewFilters, PollIndex, Poll#poll.creator_id),
-            % build the new state
-            NewPollState = Poll#poll{category = Category},
+            NewPollState = update_poll_category(NewFilters, PollIndex, Poll),
             NewPolls = maps:put(PollIndex, NewPollState, State#pks.polls),
             State#pks{polls = NewPolls, filters = NewFilters};
         error ->
@@ -252,13 +255,7 @@ do_filter_account(IDRaw, Category, State) ->
     NewFilters = filters:set_account_category(State#pks.filters, ID, Category),
     filters:store(NewFilters, "filters"),
     % build the new state
-    UpdateCategory = fun(PollIndex, Poll) ->
-                             NewCategory = filters:category(NewFilters,
-                                                            PollIndex,
-                                                            Poll#poll.creator_id),
-                             Poll#poll{category = NewCategory}
-                     end,
-    NewPolls = maps:map(UpdateCategory, State#pks.polls),
+    NewPolls = update_all_poll_categories(State#pks.polls, NewFilters),
     State#pks{filters = NewFilters, polls = NewPolls}.
 
 do_get_filters(State) ->
@@ -275,144 +272,39 @@ add_default_category(PollID, Poll, {AF, CF}) ->
     NewCF = maps:update_with(PollID, fun(Cat) -> Cat end, default, CF),
     {NewAF, NewCF}.
 
+do_ground_truth(Polls, State) ->
+    PollsFiltered = update_all_poll_categories(Polls, State#pks.filters),
+    State#pks{polls = PollsFiltered}.
+
 %%
 % Ground Truth
 %%
 
-initial_state(RegistryID, Filters) ->
-    Polls = case contract_man:query_polls(RegistryID) of
-                {ok, PollMap} ->
-                    convert_polls(PollMap, Filters);
-                {error, Error} ->
-                    io:format("Could not connect to network (~w), creating a "
-                              "fake poll to list instead.~n", [Error]),
-                    DummyPoll = #poll{chain_id = "n/a",
-                                      creator_id = "n/a",
-                                      category = 2,
-                                      title = "Fake Poll",
-                                      description = "Fake poll for testing the frontend. (Does not actually appear on chain)",
-                                      url = "example.com",
-                                      close_height = never_closes,
-                                      options = #{1 => #poll_option{name = "Option 1"},
-                                                  2 => #poll_option{name = "Option 2"}}},
-                    #{1 => DummyPoll}
-            end,
-    #pks{registry_id = RegistryID, polls = Polls, filters = Filters}.
-
-convert_polls(PollMap, Filters) ->
-    ConvertPoll = fun(_Index, PollInfo) ->
-                          read_poll_from_registry(Filters, PollInfo)
+update_all_poll_categories(Polls, Filters) ->
+    ConvertPoll = fun(Index, Poll) ->
+                          update_poll_category(Filters, Index, Poll)
                   end,
-    maps:map(ConvertPoll, PollMap).
+    maps:map(ConvertPoll, Polls).
 
-read_poll_from_registry(Filters, PollInfo) ->
-    PollID = maps:get("poll", PollInfo),
-
-    % FIXME: People could create any old contract that has a `vote` entrypoint,
-    % so who knows if this state is valid.
-    {ok, PollState} = contract_man:query_poll_state(PollID),
-
-    Metadata = maps:get("metadata", PollState),
-    Title = maps:get("title", Metadata),
-    Description = maps:get("description", Metadata),
-    URL = maps:get("link", Metadata),
-
-    OptionNames = maps:get("vote_options", PollState),
-    CloseHeight = case maps:get("close_height", PollState) of
-                      {"None"} -> never_closes;
-                      {"Some", Height} -> Height
-                  end,
-    VotesMap = maps:get("votes", PollState),
-
-    OptionsNoVotes = maps:map(fun(_, Name) -> #poll_option{name = Name} end,
-                              OptionNames),
-
-    AddVote = fun(ID, OptionIndex, Options) ->
-                      case maps:is_key(OptionIndex, Options) of
-                          true ->
-                              {ok, Weight} = contract_man:query_account_balance(ID),
-                              options_add_vote(ID, OptionIndex, Weight,
-                                               Options);
-                          false ->
-                              Options
-                      end
-              end,
-    Options = maps:fold(AddVote, OptionsNoVotes, VotesMap),
-
-    {ok, #{"owner_id" := CreatorID}} = vanillae:contract(PollID),
-    Category = filters:category(Filters, PollID, CreatorID),
-
-    #poll{chain_id = PollID,
-          creator_id = CreatorID,
-          category = Category,
-          title = Title,
-          description = Description,
-          url = URL,
-          close_height = CloseHeight,
-          options = Options}.
+update_poll_category(Filters, Index, Poll) ->
+    Category = filters:category(Filters, Index, Poll#poll.creator_id),
+    Poll#poll{category = Category}.
 
 %%
-% Data Manipulation
+% Initial State
 %%
 
-update_vote(PollIndex, ID, NewOption, State) ->
-    Poll = maps:get(PollIndex, State#pks.polls),
-    PollWithout = poll_remove_vote(ID, Poll),
-    PollWith = case NewOption of
-                   revoke ->
-                       PollWithout;
-                   _ ->
-                       {ok, Weight} = contract_man:query_account_balance(ID),
-                       Options = options_add_vote(ID, NewOption, Weight,
-                                                  PollWithout#poll.options),
-                       PollWithout#poll{options = Options}
-               end,
-    NewPolls = maps:put(PollIndex, PollWith, State#pks.polls),
-    State#pks{polls = NewPolls}.
-
-options_add_vote(ID, OptionIndex, Weight, Options) ->
-    O = maps:get(OptionIndex, Options),
-    {ok, Weight} = contract_man:query_account_balance(ID),
-    Vote = #poll_vote{id = ID, weight = Weight},
-
-    Votes = O#poll_option.votes,
-    NewTally = O#poll_option.vote_tally + Weight,
-
-    O2 = O#poll_option{votes = [Vote | Votes],
-                       vote_tally = NewTally},
-    maps:put(OptionIndex, O2, Options).
-
-poll_remove_vote(ID, Poll) ->
-    OptionRemoveVote = fun(_, O) ->
-                               option_remove_vote(ID, O)
-                       end,
-    NewOptions = maps:map(OptionRemoveVote, Poll#poll.options),
-    Poll#poll{options = NewOptions}.
-
-option_remove_vote(ID, O) ->
-    {Vs, T} = votes_remove(ID, O#poll_option.votes, [], 0),
-    O#poll_option{votes = Vs, vote_tally = T}.
-
-votes_remove(ID, [#poll_vote{id = ID} | Remaining], Vs, T) ->
-    votes_remove(ID, Remaining, Vs, T);
-votes_remove(ID, [Vote | Remaining], Vs, T) ->
-    votes_remove(ID, Remaining, [Vote | Vs], T + Vote#poll_vote.weight);
-votes_remove(_ID, [], Vs, T) ->
-    {lists:reverse(Vs), T}.
-
-poll_lookup_user(ID, Poll) ->
-    OptionLookupUser = fun(OID, O, Acc) ->
-                               Votes = O#poll_option.votes,
-                               votes_lookup_user(ID, OID, Votes, Acc)
-                       end,
-    maps:fold(OptionLookupUser, [], Poll#poll.options).
-
-votes_lookup_user(ID, OID, [#poll_vote{id = ID} | Remaining], Acc) ->
-    votes_lookup_user(ID, OID, Remaining, [OID | Acc]);
-votes_lookup_user(ID, OID, [_ | Remaining], Acc) ->
-    votes_lookup_user(ID, OID, Remaining, Acc);
-votes_lookup_user(_ID, _OID, [], Acc) ->
-    % Should be empty or a singleton, so there is no need to reverse.
-    % Also, Acc includes other options, so we better not anyway.
-    Acc.
+dummy_state(RegistryID, Filters) ->
+    DummyPoll = #poll{chain_id = "n/a",
+                      creator_id = "n/a",
+                      category = 2,
+                      title = "Fake Poll",
+                      description = "Fake poll for testing the frontend. (Does not actually appear on chain)",
+                      url = "example.com",
+                      close_height = never_closes,
+                      options = #{1 => #poll_option{name = "Option 1"},
+                                  2 => #poll_option{name = "Option 2"}}},
+    Polls = #{1 => DummyPoll},
+    PollsFiltered = update_all_poll_categories(Polls, Filters),
+    #pks{registry_id = RegistryID, polls = PollsFiltered, filters = Filters}.
 

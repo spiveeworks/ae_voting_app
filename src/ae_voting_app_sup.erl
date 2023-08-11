@@ -23,6 +23,14 @@ init([]) ->
             start => {query_man, start_link, []}
         },
 
+        % Maybe this should go after poll_keeper, since it sends things to
+        % poll_keeper, or before, since poll_keeper calls it... Or we could use
+        % the first call from poll_keeper to start the timer.
+        #{
+            id => ground_truth,
+            start => {ground_truth, start_link, []}
+        },
+
         % Maybe this should go after poll_keeper, but it is easier to test if
         % it comes before.
         #{
