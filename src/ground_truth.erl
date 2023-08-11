@@ -35,7 +35,14 @@ request_full_state() ->
 
 init({}) ->
     {ok, [RegistryID]} = file:consult("registry_id"),
-    {ok, #gts{registry_id = RegistryID}}.
+    % Start a timer straight away. We are starting either because the
+    % application as a whole just started, or because we died and the
+    % supervisor is restarting us. In the first case the poll_keeper will
+    % override this timer with a request_full_state(), but in the second case
+    % we want to restart the timer, so we do here. In theory the poll_keeper
+    % might also have gone down, in which case it has a minute to restart. ;)
+    Ref = erlang:start_timer(60000, self(), update_state),
+    {ok, #gts{registry_id = RegistryID, timer = Ref}}.
 
 handle_call({get_poll_state, Contract}, _, State) ->
     Result = do_get_poll_state(Contract),
