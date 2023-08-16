@@ -78,12 +78,14 @@ do_add_poll_hash(Title, TH, State) ->
     NewPoll = #pending_poll{title = Title, address = {pending, TH}},
     [NewPoll | State].
 
-do_poll_created(Title, TH, Contract, State) ->
+do_poll_created(Title, TH, ContractRaw, State) ->
+    Contract = unicode:characters_to_list(ContractRaw),
     StateWithout = lists:keydelete({pending, TH}, #pending_poll.address, State),
     NewPoll = #pending_poll{title = Title, address = {created, Contract}},
     [NewPoll | StateWithout].
 
-do_add_register_hash(Title, Contract, TH, State) ->
+do_add_register_hash(Title, ContractRaw, TH, State) ->
+    Contract = unicode:characters_to_list(ContractRaw),
     % TODO: check somewhere if this contract has been registered already?
     io:format("received hash: ~s~n", [TH]),
     case remove_unregistered(State, Contract) of

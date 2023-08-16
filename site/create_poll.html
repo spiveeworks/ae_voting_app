@@ -6,6 +6,82 @@
     import * as sk from "../sidekick.js";
     import * as aev from "/aev_util.js";
 
+    var polls_loaded = false;
+
+    async function login() {
+        let login_success = await aev.login();
+        if (!login_success) return;
+
+        if (!polls_loaded) {
+            let submit_resp = await aev.request_and_sign("/api/unregisteredPolls", {});
+            if (submit_resp.ok) {
+                console.log(submit_resp);
+                let polls = submit_resp.body.unregistered_polls;
+
+                // flag to make sure we don't add to the tables twice
+                polls_loaded = true;
+
+                generatePollTable(polls);
+            }
+        }
+    }
+
+    function generatePollTable(polls) {
+        let table = document.getElementById("unregistered_polls_table");
+
+        for (let poll of polls) {
+            let row = table.insertRow();
+
+            row.insertCell()
+               .appendChild(document.createTextNode(poll.title));
+            row.insertCell()
+               .appendChild(document.createTextNode(poll.contract_address));
+
+            let register = document.createElement("button");
+            register.addEventListener("click", registerPoll);
+            register.innerText = "register";
+            row.insertCell()
+                .appendChild(register);
+        }
+
+        // Generate the head AFTER the body, because of course.
+        let thead = table.createTHead();
+        let row = thead.insertRow();
+
+        let th1 = document.createElement("th");
+        th1.appendChild(document.createTextNode("Title"));
+        row.appendChild(th1);
+
+        let th2 = document.createElement("th");
+        th2.appendChild(document.createTextNode("Address"));
+        row.appendChild(th2);
+    }
+
+    async function registerPoll(event) {
+        let button = event.target;
+
+        let table = document.getElementById("unregistered_polls_table");
+        let rows = table.rows;
+        for (var i = 1; i < rows.length; i++) {
+            let this_button = rows[i].cells[2].children[0];
+            if (button == this_button) { // double equals, yolo
+                let address = rows[i].cells[1].textContent;
+
+                let request = {
+                    contract_address: address
+                };
+
+                let post_resp = await aev.form_and_post("/api/registerPoll", request);
+
+                if (post_resp.ok) {
+                    table.deleteRow(i);
+                }
+
+                return;
+            }
+        }
+    }
+
     function removeOption(event) {
         let button = event.target;
 
@@ -88,7 +164,7 @@
     async function updateButtons() {
         let login_button = document.getElementById("login_button");
         login_button.innerText = "Select account";
-        login_button.onclick = aev.login;
+        login_button.onclick = login;
 
         let form = document.querySelector("form");
         form.addEventListener("submit", createPoll);
@@ -112,7 +188,13 @@
 
 <button id="login_button">Loading...</button>
 
-<h1>Create a New Poll</h1>
+<h2>Unregistered Polls</h2>
+
+<table id="unregistered_polls_table">
+<!-- to be generated client-side --!>
+</table>
+
+<h2>Create a New Poll</h2>
 
 <form onsubmit="return false;" accept-charset="utf-8">
     <table>

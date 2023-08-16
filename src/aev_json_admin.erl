@@ -49,7 +49,16 @@ handle_post(Req, State = set_permissions) ->
 handle_post(Req, State = form_poll_tx) ->
     form_poll_tx(Req, State);
 handle_post(Req, State = post_poll_tx) ->
-    post_poll_tx(Req, State).
+    post_poll_tx(Req, State);
+handle_post(Req, State = get_polls_form_message) ->
+    form_message(Req, State, fun get_polls_convert/2, fun get_polls_payload/1);
+handle_post(Req, State = get_polls) ->
+    check_signature(Req, State, fun get_polls_convert/2,
+                    fun get_polls_payload/1, fun get_polls/1);
+handle_post(Req, State = form_register_tx) ->
+    form_register_tx(Req, State);
+handle_post(Req, State = post_register_tx) ->
+    post_register_tx(Req, State).
 
 %%%%%%%%%%%%%%%%%
 % Generic Logic
@@ -358,5 +367,79 @@ post_poll_tx2(Req0, State, _ID, Title, _Description, _URL, _Lifetime, _OptionsLi
             {false, Req0, State}
     end.
 
-% Encode a list of all polls
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% List Unregistered Polls
+
+get_polls_convert(ID, Body) when Body == #{} ->
+    case permissions:can_create_polls(ID) of
+        true -> {ok, {}};
+        false -> error
+    end;
+get_polls_convert(_, _) ->
+    error.
+
+get_polls_payload(_) ->
+    "view unregistered polls".
+
+get_polls(_) ->
+    IS = incubator:get_state(),
+    Unregistered = lists:filtermap(fun pending_poll_is_unregistered/1, IS),
+    #{unregistered_polls => Unregistered}.
+
+pending_poll_is_unregistered({pending_poll, Title, {created, ID}, none}) ->
+    {true, #{title => Title, contract_address => ID}};
+pending_poll_is_unregistered(_) ->
+    false.
+
+%%%%%%%%%%%%%%%%%%%%%
+% Poll Registration
+
+form_register_tx(Req0, State) ->
+    case aev_json_parse:parse_req_body(Req0) of
+        {ok, #{<<"contract_address">> := Contract,
+               <<"address">> := ID}, Req1} ->
+            form_register_tx2(Req1, State, ID, Contract);
+        {ok, Body, Req1} ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            {false, Req1, State};
+        {error, Req1} ->
+            io:format("Failure.~n", []),
+            {false, Req1, State}
+    end.
+
+form_register_tx2(Req0, State, ID, Contract) ->
+    case contract_man:register_poll(ID, poll_keeper:get_registry_address(), Contract, false) of
+        {ok, {_ResultType, TX}} ->
+            Data = zj:encode(#{tx => TX}),
+            Req1 = cowboy_req:set_resp_body(Data, Req0),
+            {true, Req1, State};
+        {error, _} ->
+            {false, Req0, State}
+    end.
+
+post_register_tx(Req0, State) ->
+    case aev_json_parse:parse_req_body(Req0) of
+        {ok, #{<<"contract_address">> := Contract,
+               <<"address">> := ID,
+               <<"signed_tx">> := SignedTX}, Req1} ->
+            post_register_tx2(Req1, State, ID, Contract, SignedTX);
+        {ok, Body, Req1} ->
+            io:format("Invalid data received: ~p~n", [Body]),
+            {false, Req1, State};
+        {error, Req1} ->
+            io:format("Failure.~n", []),
+            {false, Req1, State}
+    end.
+
+post_register_tx2(Req0, State, _ID, Contract, SignedTX) ->
+    case vanillae:post_tx(SignedTX) of
+        {ok, #{"tx_hash" := TH}} ->
+            incubator:add_register_hash("Unknown", Contract, TH),
+            Data = zj:encode(#{"tx_hash" => TH}),
+            Req1 = cowboy_req:set_resp_body(Data, Req0),
+            {true, Req1, State};
+        Error ->
+            io:format("post_tx failed with ~p~n", [Error]),
+            {false, Req0, State}
+    end.
 

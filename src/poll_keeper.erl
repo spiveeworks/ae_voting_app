@@ -47,8 +47,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, {}, []).
 
-add_poll(Title, Options) ->
-    gen_server:cast(?MODULE, {add_poll, Title, Options}).
+add_poll(Index, Poll) ->
+    gen_server:cast(?MODULE, {add_poll, Index, Poll}).
 
 get_polls(Category) ->
     gen_server:call(?MODULE, {get_polls, Category}).
@@ -119,8 +119,8 @@ handle_call(get_filters, _, State) ->
     Filters = do_get_filters(State),
     {reply, Filters, State}.
 
-handle_cast({add_poll, Title, Options}, State) ->
-    NewState = do_add_poll(Title, Options, State),
+handle_cast({add_poll, Index, Poll}, State) ->
+    NewState = do_add_poll(Index, Poll, State),
     {noreply, NewState};
 handle_cast({track_vote, ID, PollIndex, Option, TH}, State) ->
     NewState = do_track_vote(ID, PollIndex, Option, TH, State),
@@ -196,9 +196,9 @@ do_get_user_status2(PollIndex, Poll, ID, State) ->
               end,
     {ok, Current, Pending}.
 
-do_add_poll(_Title, _Options, State) ->
-    io:print("Warning: do_add_poll is not yet implemented.~n", []),
-    State.
+do_add_poll(Index, Poll, State) ->
+    NewPolls = maps:put(Index, Poll, State#pks.polls),
+    State#pks{polls = NewPolls}.
 
 do_track_vote(IDRaw, PollIndex, Option, TH, State) ->
     ID = unicode:characters_to_list(IDRaw),
