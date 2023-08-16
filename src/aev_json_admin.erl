@@ -302,8 +302,13 @@ form_poll_tx(Req0, State) ->
 form_poll_tx2(Req0, State, ID, Title, Description, URL, LifetimeBinary, OptionsList) ->
     Options = list_to_map(OptionsList),
     SpecRef = none,
-    LifetimeList = unicode:characters_to_list(LifetimeBinary),
-    Lifetime = list_to_integer(LifetimeList),
+    Lifetime = case LifetimeBinary of
+                   <<"never_closes">> ->
+                       never_closes;
+                   _ ->
+                       LifetimeList = unicode:characters_to_list(LifetimeBinary),
+                       list_to_integer(LifetimeList)
+               end,
     case contract_man:create_poll(ID, Title, Description, URL, SpecRef, Options, Lifetime) of
         {ok, TX} ->
             Data = zj:encode(#{tx => TX}),
@@ -341,10 +346,10 @@ post_poll_tx(Req0, State) ->
             {false, Req1, State}
     end.
 
-post_poll_tx2(Req0, State, _ID, _Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX) ->
+post_poll_tx2(Req0, State, _ID, Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX) ->
     case vanillae:post_tx(SignedTX) of
         {ok, #{"tx_hash" := TH}} ->
-            % Track the poll somewhere? In a buffer of unregistered polls?
+            incubator:add_poll_hash(Title, TH),
             Data = zj:encode(#{"tx_hash" => TH}),
             Req1 = cowboy_req:set_resp_body(Data, Req0),
             {true, Req1, State};

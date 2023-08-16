@@ -191,9 +191,9 @@ run_tests() ->
     %RegistryID = create_registry_and_poll_parallel(),
     %create_and_add_poll(RegistryID),
 
-    RegistryID = poll_keeper:get_registry_address(),
+    %RegistryID = poll_keeper:get_registry_address(),
 
-    create_and_add_poll(RegistryID),
+    %create_and_add_poll(RegistryID),
 
     %PollID = 9,
 

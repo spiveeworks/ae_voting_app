@@ -94,9 +94,12 @@ do_get_full_state(RegistryID) ->
 do_get_full_state2(PollMap) ->
     ConvertPoll = fun(_Index, PollInfo) ->
                           PollID = maps:get("poll", PollInfo),
-                          do_get_poll_state(PollID)
+                          case do_get_poll_state(PollID) of
+                              {ok, Poll} -> {true, Poll};
+                              {error, _} -> false
+                          end
                   end,
-    Polls = maps:map(ConvertPoll, PollMap),
+    Polls = maps:filtermap(ConvertPoll, PollMap),
     {ok, Polls}.
 
 do_get_poll_state(PollID) ->
@@ -150,13 +153,14 @@ do_get_poll_state3(PollID, CreatorID, PollState) ->
     Options = maps:fold(AddVote, OptionsNoVotes, VotesMap),
 
 
-    #poll{chain_id = PollID,
-          creator_id = CreatorID,
-          title = Title,
-          description = Description,
-          url = URL,
-          close_height = CloseHeight,
-          options = Options}.
+    Poll = #poll{chain_id = PollID,
+                 creator_id = CreatorID,
+                 title = Title,
+                 description = Description,
+                 url = URL,
+                 close_height = CloseHeight,
+                 options = Options},
+    {ok, Poll}.
 
 %%
 % Data Manipulation
