@@ -38,7 +38,7 @@
                .appendChild(document.createTextNode(poll.contract_address));
 
             let register = document.createElement("button");
-            register.addEventListener("click", registerPoll);
+            register.addEventListener("click", registerPollCallback);
             register.innerText = "register";
             row.insertCell()
                 .appendChild(register);
@@ -57,7 +57,15 @@
         row.appendChild(th2);
     }
 
-    async function registerPoll(event) {
+    function registerPoll(contract_address) {
+        let request = {
+            contract_address: contract_address
+        };
+
+        return aev.form_and_post("/api/registerPoll", request);
+    }
+
+    async function registerPollCallback(event) {
         let button = event.target;
 
         let table = document.getElementById("unregistered_polls_table");
@@ -65,13 +73,9 @@
         for (var i = 1; i < rows.length; i++) {
             let this_button = rows[i].cells[2].children[0];
             if (button == this_button) { // double equals, yolo
-                let address = rows[i].cells[1].textContent;
+                let contract_address = rows[i].cells[1].textContent;
 
-                let request = {
-                    contract_address: address
-                };
-
-                let post_resp = await aev.form_and_post("/api/registerPoll", request);
+                let post_resp = await registerPoll(contract_address);
 
                 if (post_resp.ok) {
                     table.deleteRow(i);
@@ -154,11 +158,15 @@
             description: description,
             url: url,
             lifetime: lifetime,
-            options: options
+            options: options,
+            wait_until_mined: true,
         };
 
         let post_resp = await aev.form_and_post("/api/createPoll", request);
-        console.log(post_resp);
+
+        if (post_resp.ok && post_resp.body.contract_id != "not_mined") {
+            registerPoll(post_resp.body.contract_id);
+        }
     }
 
     async function updateButtons() {

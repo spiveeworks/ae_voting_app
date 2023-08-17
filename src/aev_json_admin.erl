@@ -344,9 +344,10 @@ post_poll_tx(Req0, State) ->
                <<"lifetime">> := Lifetime,
                <<"options">> := Options,
                <<"address">> := ID,
-               <<"signed_tx">> := SignedTX}, Req1} ->
+               <<"signed_tx">> := SignedTX,
+               <<"wait_until_mined">> := Wait}, Req1} ->
             post_poll_tx2(Req1, State, ID, Title, Description, URL, Lifetime,
-                          Options, SignedTX);
+                          Options, SignedTX, Wait);
         {ok, Body, Req1} ->
             io:format("Invalid data received: ~p~n", [Body]),
             {false, Req1, State};
@@ -355,15 +356,34 @@ post_poll_tx(Req0, State) ->
             {false, Req1, State}
     end.
 
-post_poll_tx2(Req0, State, _ID, Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX) ->
+post_poll_tx2(Req0, State, _ID, Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX, Wait) ->
     case vanillae:post_tx(SignedTX) of
         {ok, #{"tx_hash" := TH}} ->
             incubator:add_poll_hash(Title, TH),
-            Data = zj:encode(#{"tx_hash" => TH}),
-            Req1 = cowboy_req:set_resp_body(Data, Req0),
-            {true, Req1, State};
+            post_poll_tx3(Req0, State, Wait, TH);
         Error ->
             io:format("post_tx failed with ~p~n", [Error]),
+            {false, Req0, State}
+    end.
+
+post_poll_tx3(Req0, State, Wait, TH) ->
+    case Wait of
+        false ->
+            Data = zj:encode(#{"tx_hash" => TH, "contract_id" => "not_mined"}),
+            Req1 = cowboy_req:set_resp_body(Data, Req0),
+            {true, Req1, State};
+        true ->
+            post_poll_tx4(Req0, State, TH)
+    end.
+
+post_poll_tx4(Req0, State, TH) ->
+    query_man:subscribe_tx_contract(self(), "create poll", TH),
+    receive
+        {subscribe_tx, "create poll", {ok, Contract}} ->
+            Data = zj:encode(#{"tx_hash" => TH, "contract_id" => Contract}),
+            Req1 = cowboy_req:set_resp_body(Data, Req0),
+            {true, Req1, State};
+        {subscribe_tx, "create poll", {error, _}} ->
             {false, Req0, State}
     end.
 
