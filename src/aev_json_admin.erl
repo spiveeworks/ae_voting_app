@@ -396,10 +396,29 @@ post_poll_tx4(Req0, State, TH) ->
 % List Unregistered Polls
 
 unregistered_polls_count(Req, State) ->
-    #{unregistered_polls := Unregistered} = get_polls({}),
-    Count = erlang:length(Unregistered),
-    Data = zj:encode(#{"count" => Count}),
+    IS = incubator:get_state(),
+    Unregistered = lists:filtermap(fun pending_poll_is_unregistered/1, IS),
+    PendingC = lists:filter(fun pending_poll_is_unmined/1, IS),
+    PendingR = lists:filter(fun pending_poll_is_being_registered/1, IS),
+    Data = zj:encode(#{"unregistered_count" => erlang:length(Unregistered),
+                       "pending_creation_count" => erlang:length(PendingC),
+                       "pending_registration_count" => erlang:length(PendingR)}),
     {Data, Req, State}.
+
+pending_poll_is_unregistered({pending_poll, Title, {created, ID}, none}) ->
+    {true, #{title => Title, contract_address => ID}};
+pending_poll_is_unregistered(_) ->
+    false.
+
+pending_poll_is_unmined({pending_poll, _, {pending, _}, none}) ->
+    true;
+pending_poll_is_unmined(_) ->
+    false.
+
+pending_poll_is_being_registered({pending_poll, _, _, none}) ->
+    false;
+pending_poll_is_being_registered({pending_poll, _, _, _}) ->
+    true.
 
 get_polls_convert(ID, Body) when Body == #{} ->
     case permissions:can_create_polls(ID) of
@@ -416,11 +435,6 @@ get_polls(_) ->
     IS = incubator:get_state(),
     Unregistered = lists:filtermap(fun pending_poll_is_unregistered/1, IS),
     #{unregistered_polls => Unregistered}.
-
-pending_poll_is_unregistered({pending_poll, Title, {created, ID}, none}) ->
-    {true, #{title => Title, contract_address => ID}};
-pending_poll_is_unregistered(_) ->
-    false.
 
 %%%%%%%%%%%%%%%%%%%%%
 % Poll Registration

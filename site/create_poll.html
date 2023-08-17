@@ -13,15 +13,6 @@
         if (!login_success) return;
 
         if (!polls_loaded) {
-            let count_resp = await fetch("/api/unregisteredPolls/count");
-            if (count_resp.ok) {
-                let result = await count_resp.json();
-                if (result.count == 0) {
-                    let out = document.getElementById("unregistered_list_status");
-                    out.textContent = "There were no unregistered polls when you selected this account.";
-                    return;
-                }
-            }
             // There may be unregistered polls, so use authority to display them.
             let submit_resp = await aev.request_and_sign("/api/unregisteredPolls", {});
             if (submit_resp.ok) {
@@ -67,13 +58,13 @@
 
     function generatePollTable(polls) {
         let out = document.getElementById("unregistered_list_status");
-        out.textContent = "";
 
         let table = document.getElementById("unregistered_polls_table");
 
         if (polls.length == 0) {
             out.textContent = "There were no unregistered polls when you selected this account.";
         } else {
+            out.textContent = "";
             for (let poll of polls) {
                 generatePollRow(table, poll.title, poll.contract_address);
             }
@@ -87,7 +78,9 @@
 
         let post_resp = await aev.form_and_post("/api/registerPoll", request);
 
+        let out = document.getElementById("unregistered_list_status");
         if (post_resp.ok) {
+            out.textContent = "Poll is being registered.";
             // remove rows from the table with this contract address
             let table = document.getElementById("unregistered_polls_table");
             let rows = table.rows;
@@ -105,15 +98,21 @@
                 let count_resp = await fetch("/api/unregisteredPolls/count");
                 if (count_resp.ok) {
                     let result = await count_resp.json();
-                    let out = document.getElementById("unregistered_list_status");
-                    if (result.count == 0) {
-                        out.textContent = "All polls have been registered.";
+                    if (result.unregistered_count != 0) {
+                        out.textContent = "Poll is being registered. Refresh to see remaining unregistered polls.";
+                    } else if (result.pending_registration_count != 0) {
+                        out.textContent = "Poll is being registered. Refresh to see if it succeeds.";
+                    } else if (result.pending_creation_count != 0) {
+                        out.textContent = "All polls have been registered, but another is being created. Refresh to see if it gets mined.";
                     } else {
-                        out.textContent = "Refresh to see remaining unregistered polls.";
+                        out.textContent = "All polls have been registered.";
                     }
                 }
             }
+        } else {
+            out.textContent = "Failed to register poll.";
         }
+        return post_resp;
     }
 
     function registerPollCallback(event) {
@@ -124,8 +123,10 @@
         for (var i = 1; i < rows.length; i++) {
             let this_button = rows[i].cells[2].children[0];
             if (button == this_button) { // double equals, yolo
-                let contract_address = rows[i].cells[1].textContent;
+                let out = document.getElementById("unregistered_list_status");
+                out.textContent = "Attempting to register contract...";
 
+                let contract_address = rows[i].cells[1].textContent;
                 // asynchronous call
                 registerPoll(contract_address);
                 return;
@@ -220,8 +221,9 @@
             generatePollRow(table, title, contract_id);
 
             out.textContent = "Contract created. Attempting to register contract...";
-            await registerPoll(contract_id);
-            out.textContent = "";
+            let register_resp = await
+            // asynchronous call
+            registerPoll(contract_id);
         } else {
             out.textContent = "Refresh to check if a transaction has been mined.";
         }
@@ -244,6 +246,26 @@
             remove_button.disabled = true;
             remove_button.addEventListener("click", removeOption);
         }
+
+        let count_resp = await fetch("/api/unregisteredPolls/count");
+        let status = document.getElementById("unregistered_list_status");
+        if (count_resp.ok) {
+            let result = await count_resp.json();
+            if (result.unregistered_count == 0) {
+                polls_loaded = true;
+
+                if (result.pending_registration_count != 0) {
+                    status.textContent = "There is a poll still being registered, refresh to see if it has been mined.";
+                } else if (result.pending_creation_count != 0) {
+                    status.textContent = "There is a poll still being created, refresh to see if it has been mined.";
+                } else {
+                    status.textContent = "There were no unregistered polls when you last refreshed.";
+                }
+            }
+        }
+        if (!polls_loaded) {
+            status.textContent = "Select account to view unregistered polls.";
+        }
     }
 
     window.onload = updateButtons;
@@ -256,7 +278,7 @@
 
 <h2>Unregistered Polls</h2>
 
-<p id="unregistered_list_status">Select account to view unregistered polls.</p>
+<p id="unregistered_list_status">Checking to see if there are unregistered polls...</p>
 
 <table id="unregistered_polls_table">
 <!-- to be generated client-side --!>
