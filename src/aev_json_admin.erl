@@ -314,6 +314,15 @@ form_poll_tx(Req0, State) ->
     end.
 
 form_poll_tx2(Req0, State, ID, Title, Description, URL, LifetimeBinary, OptionsList) ->
+    case permissions:can_create_polls(ID) of
+        true ->
+            form_poll_tx3(Req0, State, ID, Title, Description, URL,
+                          LifetimeBinary, OptionsList);
+        false ->
+            {false, Req0, State}
+    end.
+
+form_poll_tx3(Req0, State, ID, Title, Description, URL, LifetimeBinary, OptionsList) ->
     Options = list_to_map(OptionsList),
     SpecRef = none,
     Lifetime = case LifetimeBinary of
@@ -361,27 +370,36 @@ post_poll_tx(Req0, State) ->
             {false, Req1, State}
     end.
 
-post_poll_tx2(Req0, State, _ID, Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX, Wait) ->
+post_poll_tx2(Req0, State, ID, Title, Description, URL, Lifetime, OptionsList, SignedTX, Wait) ->
+    case permissions:can_create_polls(ID) of
+        true ->
+            post_poll_tx3(Req0, State, ID, Title, Description, URL,
+                          Lifetime, OptionsList, SignedTX, Wait);
+        false ->
+            {false, Req0, State}
+    end.
+
+post_poll_tx3(Req0, State, _ID, Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX, Wait) ->
     case vanillae:post_tx(SignedTX) of
         {ok, #{"tx_hash" := TH}} ->
             incubator:add_poll_hash(Title, TH),
-            post_poll_tx3(Req0, State, Wait, TH);
+            post_poll_tx4(Req0, State, Wait, TH);
         Error ->
             io:format("post_tx failed with ~p~n", [Error]),
             {false, Req0, State}
     end.
 
-post_poll_tx3(Req0, State, Wait, TH) ->
+post_poll_tx4(Req0, State, Wait, TH) ->
     case Wait of
         false ->
             Data = zj:encode(#{"tx_hash" => TH, "contract_id" => "not_mined"}),
             Req1 = cowboy_req:set_resp_body(Data, Req0),
             {true, Req1, State};
         true ->
-            post_poll_tx4(Req0, State, TH)
+            post_poll_tx5(Req0, State, TH)
     end.
 
-post_poll_tx4(Req0, State, TH) ->
+post_poll_tx5(Req0, State, TH) ->
     query_man:subscribe_tx_contract(self(), "create poll", TH),
     receive
         {subscribe_tx, "create poll", {ok, Contract}} ->
@@ -453,6 +471,14 @@ form_register_tx(Req0, State) ->
     end.
 
 form_register_tx2(Req0, State, ID, Contract) ->
+    case permissions:can_create_polls(ID) of
+        true ->
+            form_register_tx3(Req0, State, ID, Contract);
+        false ->
+            {false, Req0, State}
+    end.
+
+form_register_tx3(Req0, State, ID, Contract) ->
     case contract_man:register_poll(ID, poll_keeper:get_registry_address(), Contract, false) of
         {ok, {_ResultType, TX}} ->
             Data = zj:encode(#{tx => TX}),
@@ -476,7 +502,15 @@ post_register_tx(Req0, State) ->
             {false, Req1, State}
     end.
 
-post_register_tx2(Req0, State, _ID, Contract, SignedTX) ->
+post_register_tx2(Req0, State, ID, Contract, SignedTX) ->
+    case permissions:can_create_polls(ID) of
+        true ->
+            post_register_tx3(Req0, State, ID, Contract, SignedTX);
+        false ->
+            {false, Req0, State}
+    end.
+
+post_register_tx3(Req0, State, _ID, Contract, SignedTX) ->
     case vanillae:post_tx(SignedTX) of
         {ok, #{"tx_hash" := TH}} ->
             incubator:add_register_hash("Unknown", Contract, TH),

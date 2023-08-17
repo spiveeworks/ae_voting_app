@@ -46,7 +46,7 @@ do_check(Level, IDRaw, Permissions) ->
     Actual = maps:get(ID, Permissions, 1),
     Actual >= Level.
 
-do_set(0, IDRaw, Permissions) ->
+do_set(1, IDRaw, Permissions) ->
     ID = unicode:characters_to_list(IDRaw),
     NewPermissions = maps:remove(ID, Permissions),
     save_permissions(NewPermissions),
