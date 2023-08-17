@@ -2,11 +2,13 @@
 -behavior(cowboy_handler).
 
 -export([init/2, allowed_methods/2]).
--export([content_types_provided/2, content_types_accepted/2, handle_post/2]).
+-export([content_types_provided/2, content_types_accepted/2, handle_post/2, handle_get/2]).
 
 init(Req, State) ->
     {cowboy_rest, Req, State}.
 
+allowed_methods(Req, State = unregistered_polls_count) ->
+    {[<<"GET">>, <<"OPTIONS">>], Req, State};
 allowed_methods(Req, State) ->
     {[<<"POST">>, <<"OPTIONS">>], Req, State}.
 
@@ -59,6 +61,9 @@ handle_post(Req, State = form_register_tx) ->
     form_register_tx(Req, State);
 handle_post(Req, State = post_register_tx) ->
     post_register_tx(Req, State).
+
+handle_get(Req, State = unregistered_polls_count) ->
+    unregistered_polls_count(Req, State).
 
 %%%%%%%%%%%%%%%%%
 % Generic Logic
@@ -389,6 +394,12 @@ post_poll_tx4(Req0, State, TH) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 % List Unregistered Polls
+
+unregistered_polls_count(Req, State) ->
+    #{unregistered_polls := Unregistered} = get_polls({}),
+    Count = erlang:length(Unregistered),
+    Data = zj:encode(#{"count" => Count}),
+    {Data, Req, State}.
 
 get_polls_convert(ID, Body) when Body == #{} ->
     case permissions:can_create_polls(ID) of
