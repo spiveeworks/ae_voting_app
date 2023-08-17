@@ -1,6 +1,6 @@
 -module(filters).
 
--export([load/1, store/2, category/3, set_account_category/3,
+-export([load/1, store/2, category/4, set_account_category/3,
          set_contract_category/3, reset_contract_category/2]).
 
 -export_type([poll_filter_set/0]).
@@ -20,13 +20,17 @@ store(#poll_filter_set{account_filters = AF, contract_filters = CF}, Path) ->
     % No backups right now, just write it to file. It should be fine...
     file:write_file(Path, FilterBin).
 
-category(#poll_filter_set{account_filters = AF, contract_filters = CF}, Contract, Creator) ->
+category(#poll_filter_set{account_filters = AF, contract_filters = CF}, Contract, Creator, IsFirst) ->
     case maps:find(Contract, CF) of
         {ok, Category} -> Category;
         error ->
-            case maps:find(Creator, AF) of
-                {ok, Category} -> Category;
-                error -> 1
+            case IsFirst of
+                false -> 0;
+                true ->
+                    case maps:find(Creator, AF) of
+                        {ok, Category} -> Category;
+                        error -> 1
+                    end
             end
     end.
 

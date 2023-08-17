@@ -7,6 +7,8 @@
         get_filters/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
+-compile([export_all]).
+
 %%
 % State
 %%
@@ -37,6 +39,7 @@
 -record(pks,
         {registry_id :: vanillae:contract_id(),
          polls = #{} :: #{pos_integer() => #poll{}},
+         first_indices = #{} :: #{vanillae:contract_id() => pos_integer()},
          pending_votes = #{} :: pending_votes(),
          filters :: filters:poll_filter_set()}).
 
@@ -197,8 +200,12 @@ do_get_user_status2(PollIndex, Poll, ID, State) ->
     {ok, Current, Pending}.
 
 do_add_poll(Index, Poll, State) ->
-    NewPolls = maps:put(Index, Poll, State#pks.polls),
-    State#pks{polls = NewPolls}.
+    NewIndices = update_first_indices(Poll#poll.chain_id, Index,
+                                      State#pks.first_indices),
+    FilteredPoll = update_poll_category(State#pks.filters, Index, Poll,
+                                        NewIndices),
+    NewPolls = maps:put(Index, FilteredPoll, State#pks.polls),
+    State#pks{polls = NewPolls, first_indices = NewIndices}.
 
 do_track_vote(IDRaw, PollIndex, Option, TH, State) ->
     ID = unicode:characters_to_list(IDRaw),
@@ -228,7 +235,8 @@ do_filter_poll(PollIndex, Category, State) ->
             NewFilters = filters:set_contract_category(State#pks.filters, PollIndex, Category),
             filters:store(NewFilters, "filters"),
             % work out what the category is now
-            NewPollState = update_poll_category(NewFilters, PollIndex, Poll),
+            NewPollState = update_poll_category(NewFilters, PollIndex, Poll,
+                                                State#pks.first_indices),
             NewPolls = maps:put(PollIndex, NewPollState, State#pks.polls),
             State#pks{polls = NewPolls, filters = NewFilters};
         error ->
@@ -242,7 +250,8 @@ do_filter_poll_remove(PollIndex, State) ->
             NewFilters = filters:reset_contract_category(State#pks.filters, PollIndex),
             filters:store(NewFilters, "filters"),
             % work out what the category is now
-            NewPollState = update_poll_category(NewFilters, PollIndex, Poll),
+            NewPollState = update_poll_category(NewFilters, PollIndex, Poll,
+                                                State#pks.first_indices),
             NewPolls = maps:put(PollIndex, NewPollState, State#pks.polls),
             State#pks{polls = NewPolls, filters = NewFilters};
         error ->
@@ -255,7 +264,7 @@ do_filter_account(IDRaw, Category, State) ->
     NewFilters = filters:set_account_category(State#pks.filters, ID, Category),
     filters:store(NewFilters, "filters"),
     % build the new state
-    NewPolls = update_all_poll_categories(State#pks.polls, NewFilters),
+    NewPolls = update_all_poll_categories(State#pks.polls, NewFilters, State#pks.first_indices),
     State#pks{filters = NewFilters, polls = NewPolls}.
 
 do_get_filters(State) ->
@@ -273,22 +282,48 @@ add_default_category(PollID, Poll, {AF, CF}) ->
     {NewAF, NewCF}.
 
 do_ground_truth(Polls, State) ->
-    PollsFiltered = update_all_poll_categories(Polls, State#pks.filters),
+    FirstIndices = calculate_first_indices(Polls),
+    PollsFiltered = update_all_poll_categories(Polls, State#pks.filters, FirstIndices),
     State#pks{polls = PollsFiltered}.
 
 %%
 % Ground Truth
 %%
 
-update_all_poll_categories(Polls, Filters) ->
+calculate_first_indices(Polls) ->
+    calculate_first_indices(maps:iterator(Polls), #{}).
+
+calculate_first_indices(PollsIter, FirstIndices) ->
+    case maps:next(PollsIter) of
+        {Index, #poll{chain_id = Address}, Rest} ->
+            NewIndices = update_first_indices(Address, Index, FirstIndices),
+            calculate_first_indices(Rest, NewIndices);
+        none ->
+            FirstIndices
+    end.
+
+update_first_indices(Address, Index, FirstIndices) ->
+    case is_first(Address, Index, FirstIndices) of
+        true ->
+            maps:put(Address, Index, FirstIndices);
+        false ->
+            FirstIndices
+    end.
+
+is_first(Address, Index, FirstIndices) ->
+    Index =< maps:get(Address, FirstIndices, Index).
+
+update_all_poll_categories(Polls, Filters, FirstIndices) ->
     ConvertPoll = fun(Index, Poll) ->
-                          update_poll_category(Filters, Index, Poll)
+                          update_poll_category(Filters, Index, Poll, FirstIndices)
                   end,
     maps:map(ConvertPoll, Polls).
 
-update_poll_category(Filters, Index, Poll) ->
-    Category = filters:category(Filters, Index, Poll#poll.creator_id),
+update_poll_category(Filters, Index, Poll, FirstIndices) ->
+    IsFirst = is_first(Poll#poll.chain_id, Index, FirstIndices),
+    Category = filters:category(Filters, Index, Poll#poll.creator_id, IsFirst),
     Poll#poll{category = Category}.
+
 
 %%
 % Initial State
@@ -305,6 +340,10 @@ dummy_state(RegistryID, Filters) ->
                       options = #{1 => #poll_option{name = "Option 1"},
                                   2 => #poll_option{name = "Option 2"}}},
     Polls = #{1 => DummyPoll},
-    PollsFiltered = update_all_poll_categories(Polls, Filters),
-    #pks{registry_id = RegistryID, polls = PollsFiltered, filters = Filters}.
+    FirstIndices = calculate_first_indices(Polls),
+    PollsFiltered = update_all_poll_categories(Polls, Filters, FirstIndices),
+    #pks{registry_id = RegistryID,
+         polls = PollsFiltered,
+         first_indices = FirstIndices,
+         filters = Filters}.
 
