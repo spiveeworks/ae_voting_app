@@ -4,6 +4,8 @@
 -export([init/2, allowed_methods/2]).
 -export([resource_exists/2, malformed_request/2, content_types_provided/2, to_json/2]).
 
+-include("poll_state.hrl").
+
 init(Req, State) ->
     {cowboy_rest, Req, State}.
 
@@ -47,6 +49,18 @@ resource_exists(Req, get_user_status) ->
          {ok, Current, Pending} -> {true, Req, {get_user_status, PollID, UserID, Current, Pending}};
          {error, not_found} -> {false, Req, get_user_status}
      end;
+resource_exists(Req, get_option_info) ->
+     PollID = cowboy_req:binding(poll, Req),
+     OptionID = cowboy_req:binding(option, Req),
+     case poll_keeper:get_poll(PollID) of
+         {ok, Poll} ->
+             case maps:find(OptionID, Poll#poll.options) of
+                 {ok, Option} ->
+                     {true, Req, {get_option_info, PollID, OptionID, Option}};
+                 error -> {false, Req, get_option_info}
+             end;
+         {error, not_found} -> {false, Req, get_option_info}
+     end;
 resource_exists(Req, State) ->
     % Everything else is just a static endpoint; assume that since it got
     % routed at all, it probably exists.
@@ -59,7 +73,9 @@ to_json(Req, State) ->
                {get_poll_info, PollID, Poll} ->
                    encode_poll_info(PollID, Poll);
                {get_user_status, PollID, UserID, Current, Pending} ->
-                   encode_user_status(PollID, UserID, Current, Pending)
+                   encode_user_status(PollID, UserID, Current, Pending);
+               {get_option_info, PollID, OptionID, Option} ->
+                   encode_option_info(PollID, OptionID, Option)
            end,
     {Data, Req, State}.
 
@@ -110,3 +126,19 @@ encode_user_status(_PollID, _UserID, Current, Pending) ->
     zj:encode(#{current_vote => Current,
                 pending_vote => Pending}).
 
+% Encode a detailed view of a single option in a poll
+
+encode_option_info(_PollID, _OptionID, {poll_option, Name, Votes, Tally}) ->
+    NameBin = unicode:characters_to_binary(Name),
+    VotesEncoded = lists:map(fun encode_vote/1, Votes),
+    VotesSorted = lists:sort(fun order_votes/2, VotesEncoded),
+    zj:binary_encode(#{name => NameBin,
+                       votes => VotesSorted,
+                       score => Tally}).
+
+encode_vote({poll_vote, ID, Weight}) ->
+    IDBin = unicode:characters_to_binary(ID),
+    #{voter_address => IDBin, weight => Weight}.
+
+order_votes(#{weight := Weight1}, #{weight := Weight2}) ->
+    Weight1 >= Weight2.

@@ -7,32 +7,11 @@
         get_filters/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
--compile([export_all]).
-
 %%
 % State
 %%
 
--record(poll_vote,
-        {id :: vanillae:account_id(),
-         weight :: non_neg_integer()}).
-
--record(poll_option,
-        {name :: string(),
-         votes = [] :: [#poll_vote{}],
-         vote_tally = 0 :: non_neg_integer()}).
-
-% TODO: add fields for creator, curation status, etc.
--record(poll,
-        {chain_id :: vanillae:contract_id(),
-         creator_id :: vanillae:account_id(),
-         category :: integer(),
-         title :: string(),
-         description :: string(),
-         url = "" :: string(),
-         % spec_ref = none :: none | vanillae:tx_hash(),
-         close_height :: integer() | never_closes,
-         options :: #{integer() => #poll_option{}}}).
+-include("poll_state.hrl").
 
 -type pending_votes() :: #{{pos_integer(), vanillae:account_id()} =>
                            {revoke | integer(), vanillae:tx_hash()}}.

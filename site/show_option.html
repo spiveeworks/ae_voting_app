@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<script type="module">
+    import * as sk from "/sidekick.js";
+    import * as aev from "/aev_util.js";
+
+    function setButtonsPending() {
+        let rows = document.querySelector("table").tBodies[0].rows;
+        for (let row of rows) {
+            let button = row.cells[2].children[0];
+            button.innerText = "Pending...";
+            button.onclick = null;
+        }
+    }
+
+    function generateTable(data) {
+        let table = document.querySelector("table");
+
+        for (let element of data) {
+            let row = table.insertRow();
+
+            row.insertCell()
+               .appendChild(document.createTextNode(element.voter_address));
+            row.insertCell()
+               .appendChild(document.createTextNode(element.weight));
+        }
+
+        // Generate the head AFTER the body, because of course.
+        let thead = table.createTHead();
+        let row = thead.insertRow();
+
+        let th1 = document.createElement("th");
+        th1.appendChild(document.createTextNode("Voting Address"));
+        row.appendChild(th1);
+
+        let th2 = document.createElement("th");
+        th2.appendChild(document.createTextNode("Vote Weight"));
+        row.appendChild(th2);
+    }
+
+    async function updatePolls() {
+        let [id, option_id] = getIDs();
+        document.getElementById("title").innerHTML = "Option " + option_id;
+
+        let response = await fetch("/api/poll/" + id + "/option/" + option_id);
+        if (response.ok) {
+            let object = await response.json();
+
+            document.getElementById("title").innerText = object.name;
+            document.getElementById("description").innerText = "Total score: " + object.score;
+
+            generateTable(object.votes);
+        } else if (response.status == 404) {
+            document.getElementById("description").innerText = "Not found.";
+        } else if (response.status == 500) {
+            document.getElementById("description").innerText = "Server error.";
+        }
+    }
+
+    function getIDs() {
+        let text = document.getElementById("text");
+        let path = window.location.pathname.split("/");
+        let poll_id = path[path.length - 3];
+        let option_id = path[path.length - 1];
+        return [poll_id, option_id]; // We could convert these to numbers, but it usually just gets used to build HTTP request URLs, so there is no need.
+    }
+
+    window.onload = updatePolls;
+    //setInterval(updateCounter, 1000);
+</script>
+
+<h1 id="title"></h1>
+
+<p id="description">Loading info...</p>
+
+<table>
+<!-- to be generated client-side --!>
+</table>
+
+</body>
+</html>
+

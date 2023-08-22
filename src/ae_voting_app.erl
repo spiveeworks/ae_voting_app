@@ -12,6 +12,7 @@ start(_Type, _Args) ->
         {'_', [
             {"/[polls]", cowboy_static, {file, "site/index.html"}},
             {"/polls/:id", [{id, int}], cowboy_static, {file, "site/show_poll.html"}},
+            {"/polls/:poll/option/:option", [{poll, int}, {option, int}], cowboy_static, {file, "site/show_option.html"}},
             {"/polls/admin", cowboy_static, {file, "site/poll_admin.html"}},
             {"/polls/create", cowboy_static, {file, "site/create_poll.html"}},
             {"/counter", cowboy_static, {file, "site/counter.html"}},
@@ -22,6 +23,7 @@ start(_Type, _Args) ->
             {"/api/getPolls", aev_json_polls, get_polls},
             {"/api/poll/:id", [{id, int}], aev_json_polls, get_poll_info},
             {"/api/poll/:poll/user/:user", [{poll, int}], aev_json_polls, get_user_status},
+            {"/api/poll/:poll/option/:option", [{poll, int}, {option, int}], aev_json_polls, get_option_info},
             % TODO: Should these be in /api/poll/:poll as well?
             {"/api/vote/formTransaction", aev_json_client, form_vote_tx},
             {"/api/vote/postTransaction", aev_json_client, post_vote_tx},
