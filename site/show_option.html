@@ -15,48 +15,75 @@
         }
     }
 
-    function generateTable(data) {
+    function updateTable(data) {
         let table = document.querySelector("table");
+        let tbodies = table.getElementsByTagName("tbody");
+        let tbody;
+        if (tbodies.length == 0) {
+            tbody = table.createTBody();
+        } else {
+            tbody = tbodies[0];
+        }
 
-        for (let element of data) {
-            let row = table.insertRow();
+        while (tbody.rows.length < data.length) {
+            let row = tbody.insertRow();
+            row.insertCell();
+            row.insertCell();
+        }
+        while (tbody.rows.length > data.length) {
+            tbody.deleteRow(tbody.rows.length - 1);
+        }
 
-            row.insertCell()
-               .appendChild(document.createTextNode(element.voter_address));
-            row.insertCell()
-               .appendChild(document.createTextNode(element.weight));
+        for (var i = 0; i < data.length; i++) {
+            let row = tbody.rows[i];
+            let element = data[i];
+            row.cells[0].innerText = element.voter_address;
+            row.cells[1].innerText = element.weight;
         }
 
         // Generate the head AFTER the body, because of course.
-        let thead = table.createTHead();
-        let row = thead.insertRow();
+        let theads = table.getElementsByTagName("thead");
+        if (theads.length == 0) {
+            let thead = table.createTHead();
+            let row = thead.insertRow();
 
-        let th1 = document.createElement("th");
-        th1.appendChild(document.createTextNode("Voting Address"));
-        row.appendChild(th1);
+            let th1 = document.createElement("th");
+            th1.appendChild(document.createTextNode("Voting Address"));
+            row.appendChild(th1);
 
-        let th2 = document.createElement("th");
-        th2.appendChild(document.createTextNode("Vote Weight"));
-        row.appendChild(th2);
+            let th2 = document.createElement("th");
+            th2.appendChild(document.createTextNode("Vote Weight"));
+            row.appendChild(th2);
+        }
     }
 
-    async function updatePolls() {
+    async function initialiseVotes() {
         let [id, option_id] = getIDs();
         document.getElementById("title").innerHTML = "Option " + option_id;
 
         let response = await fetch("/api/poll/" + id + "/option/" + option_id);
         if (response.ok) {
-            let object = await response.json();
+            let option_info = await response.json();
 
-            document.getElementById("title").innerText = object.name;
-            document.getElementById("description").innerText = "Total score: " + object.score;
+            document.getElementById("title").innerText = option_info.name;
+            document.getElementById("description").innerText = "Total score: " + option_info.score;
 
-            generateTable(object.votes);
+            updateTable(option_info.votes);
         } else if (response.status == 404) {
             document.getElementById("description").innerText = "Not found.";
         } else if (response.status == 500) {
             document.getElementById("description").innerText = "Server error.";
         }
+    }
+
+    async function updateVotes() {
+        let [id, option_id] = getIDs();
+        let response = await fetch("/api/poll/" + id + "/option/" + option_id);
+        if (!response.ok) return;
+
+        let option_info = await response.json();
+        document.getElementById("description").innerText = "Total score: " + option_info.score;
+        updateTable(option_info.votes);
     }
 
     function getIDs() {
@@ -67,8 +94,8 @@
         return [poll_id, option_id]; // We could convert these to numbers, but it usually just gets used to build HTTP request URLs, so there is no need.
     }
 
-    window.onload = updatePolls;
-    //setInterval(updateCounter, 1000);
+    window.onload = initialiseVotes;
+    setInterval(updateVotes, 1000);
 </script>
 
 <h1 id="title"></h1>

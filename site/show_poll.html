@@ -10,8 +10,15 @@
         let login_success = await aev.login();
         if (!login_success) return;
 
+        updateButtons();
+    }
+
+    async function updateButtons() {
+        if (!aev.logged_in) return;
+
         let status_response = await fetch("/api/poll/" + getID() + "/user/" + aev.address);
         if (!status_response.ok) return;
+
         let vote_status = await status_response.json();
         let current = vote_status.current_vote;
         let pending = vote_status.pending_vote;
@@ -107,7 +114,7 @@
         row.appendChild(th2);
     }
 
-    async function updatePolls() {
+    async function initialisePolls() {
         let login_button = document.getElementById("login_button");
         login_button.innerText = "Select account";
         login_button.onclick = login;
@@ -117,17 +124,30 @@
 
         let response = await fetch("/api/poll/" + id);
         if (response.ok) {
-            let object = await response.json();
+            let poll_info = await response.json();
 
-            document.getElementById("title").innerHTML = object.title;
-            document.getElementById("description").innerHTML = object.description;
+            document.getElementById("title").innerHTML = poll_info.title;
+            document.getElementById("description").innerHTML = poll_info.description;
 
-            generateTable(object.options);
+            generateTable(poll_info.options);
         } else if (response.status == 404) {
             document.getElementById("description").innerHTML = "Not found.";
         } else if (response.status == 500) {
             document.getElementById("description").innerHTML = "Server error.";
         }
+    }
+
+    async function updatePolls() {
+        let response = await fetch("/api/poll/" + getID());
+        if (!response.ok) return;
+        let poll_info = await response.json();
+
+        for (let element of poll_info.options) {
+            let row = document.getElementById("option" + element.id);
+            row.cells[1].innerText = element.score;
+        }
+
+        updateButtons();
     }
 
     function getID() {
@@ -137,8 +157,8 @@
         return id_str; // We could convert this to a number, but it usually just gets used to build HTTP request URLs, so there is no need.
     }
 
-    window.onload = updatePolls;
-    //setInterval(updateCounter, 1000);
+    window.onload = initialisePolls;
+    setInterval(updatePolls, 1000);
 </script>
 
 <p id="login_status">No account selected.</p>
