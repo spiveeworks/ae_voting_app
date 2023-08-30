@@ -87,12 +87,17 @@ encode_polls(Category) ->
     PollsSorted = lists:sort(fun order_polls/2, Polls),
     zj:encode(#{polls => PollsSorted}).
 
-add_poll(ID, {poll, _, _, Category, Title, _, _, CloseHeight, OptionMap}, Acc) ->
+add_poll(ID, #poll{category = Category,
+                   title = Title,
+                   close_height = CloseHeight,
+                   closed = Closed,
+                   options = OptionMap}, Acc) ->
     Options = format_options(OptionMap),
     Poll = #{id => ID,
              category => aev_category_names:from_id(Category),
              title => Title,
              close_height => CloseHeight,
+             closed => Closed,
              scores => Options},
     [Poll | Acc].
 
@@ -113,13 +118,19 @@ order_polls(#{id := IDA}, #{id := IDB}) ->
 % Encode info about one poll
 
 encode_poll_info(PollID, Poll) ->
-    {poll, _, _, _, Title, Description, URL, CloseHeight, OptionMap} = Poll,
+    #poll{title = Title,
+          description = Description,
+          url = URL,
+          close_height = CloseHeight,
+          closed = Closed,
+          options = OptionMap} = Poll,
     Options = format_options(OptionMap),
     zj:encode(#{id => PollID,
                 title => Title,
                 description => Description,
                 url => URL,
                 close_height => CloseHeight,
+                closed => Closed,
                 options => Options}).
 
 encode_user_status(_PollID, _UserID, Current, Pending) ->

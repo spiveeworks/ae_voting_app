@@ -3,7 +3,7 @@
 
 -export([start_link/0]).
 -export([create_registry/1, query_polls_tx/2, query_polls/1, create_poll/7,
-         register_poll/4, query_poll_state/1, query_account_balance/1,
+         register_poll/4, query_poll_state/1, query_account_balance/2,
          vote_tx/3]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
@@ -35,8 +35,8 @@ register_poll(ID, RegistryID, PollID, Listed) ->
 query_poll_state(PollID) ->
     gen_server:call(?MODULE, {query_poll_state, PollID}).
 
-query_account_balance(ID) ->
-    gen_server:call(?MODULE, {query_account_balance, ID}).
+query_account_balance(ID, PollHeight) ->
+    gen_server:call(?MODULE, {query_account_balance, ID, PollHeight}).
 
 vote_tx(ID, PollID, Option) ->
     gen_server:call(?MODULE, {vote_tx, ID, PollID, Option}).
@@ -83,8 +83,8 @@ handle_call({register_poll, ID, RegistryID, PollID, Listed}, _, State) ->
 handle_call({query_poll_state, PollID}, _, State) ->
     Result = do_query_poll_state(State, PollID),
     {reply, Result, State};
-handle_call({query_account_balance, ID}, _, State) ->
-    Result = do_query_account_balance(State, ID),
+handle_call({query_account_balance, ID, PollHeight}, _, State) ->
+    Result = do_query_account_balance(State, ID, PollHeight),
     {reply, Result, State};
 handle_call({vote_tx, ID, PollID, Option}, _, State) ->
     Result = do_vote_tx(State, ID, PollID, Option),
@@ -175,8 +175,8 @@ do_query_poll_state(State, PollID) ->
             Error
     end.
 
-do_query_account_balance(_State, ID) ->
-    case vanillae:acc(ID) of
+do_query_account_balance(_State, ID, PollHeight) ->
+    case vanillae:acc_at_height(ID, PollHeight) of
         {ok, #{"balance" := Balance}} -> {ok, Balance};
         {error, Reason} -> {error, Reason}
     end.

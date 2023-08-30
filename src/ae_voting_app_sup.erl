@@ -10,11 +10,6 @@ start_link() ->
 init([]) ->
     Procs = [
         #{
-            id => counter,
-            start => {counter, start_link, [0]}
-        },
-
-        #{
             id => contract_man,
             start => {contract_man, start_link, []}
         },

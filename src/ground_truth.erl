@@ -92,9 +92,15 @@ do_get_full_state(RegistryID) ->
     end.
 
 do_get_full_state2(PollMap) ->
+    case vanillae:top_height() of
+        {ok, CurrentHeight} -> do_get_full_state3(PollMap, CurrentHeight);
+        Error -> Error
+    end.
+
+do_get_full_state3(PollMap, CurrentHeight) ->
     ConvertPoll = fun(_Index, PollInfo) ->
                           PollID = maps:get("poll", PollInfo),
-                          case do_get_poll_state(PollID) of
+                          case do_get_poll_state2(PollID, CurrentHeight) of
                               {ok, Poll} -> {true, Poll};
                               {error, _} -> false
                           end
@@ -103,24 +109,30 @@ do_get_full_state2(PollMap) ->
     {ok, Polls}.
 
 do_get_poll_state(PollID) ->
+    case vanillae:top_height() of
+        {ok, CurrentHeight} -> do_get_poll_state2(PollID, CurrentHeight);
+        Error -> Error
+    end.
+
+do_get_poll_state2(PollID, CurrentHeight) ->
     case vanillae:contract(PollID) of
         {ok, #{"owner_id" := CreatorID}} ->
-            do_get_poll_state2(PollID, CreatorID);
+            do_get_poll_state3(PollID, CurrentHeight, CreatorID);
         {ok, Result} ->
             {error, {badresult, Result}};
         {error, Reason} ->
             {error, Reason}
     end.
 
-do_get_poll_state2(PollID, CreatorID) ->
+do_get_poll_state3(PollID, CurrentHeight, CreatorID) ->
     case contract_man:query_poll_state(PollID) of
         {ok, PollState} ->
-            do_get_poll_state3(PollID, CreatorID, PollState);
+            do_get_poll_state4(PollID, CurrentHeight, CreatorID, PollState);
         {error, Error} ->
             {error, Error}
     end.
 
-do_get_poll_state3(PollID, CreatorID, PollState) ->
+do_get_poll_state4(PollID, CurrentHeight, CreatorID, PollState) ->
     % FIXME: People could create any old contract that has a `vote` entrypoint,
     % so who knows if this state is valid.
     {ok, PollState} = contract_man:query_poll_state(PollID),
@@ -131,10 +143,16 @@ do_get_poll_state3(PollID, CreatorID, PollState) ->
     URL = maps:get("link", Metadata),
 
     OptionNames = maps:get("vote_options", PollState),
-    CloseHeight = case maps:get("close_height", PollState) of
-                      {"None"} -> never_closes;
-                      {"Some", Height} -> Height
-                  end,
+    {CloseHeight, Closed} = case maps:get("close_height", PollState) of
+                                {"None"} ->
+                                    {never_closes, false};
+                                {"Some", Height} ->
+                                    {Height, CurrentHeight >= Height}
+                            end,
+    PollHeight = case Closed of
+                     false -> CurrentHeight;
+                     true -> CloseHeight
+                 end,
     VotesMap = maps:get("votes", PollState),
 
     OptionsNoVotes = maps:map(fun(_, Name) -> #poll_option{name = Name} end,
@@ -143,9 +161,7 @@ do_get_poll_state3(PollID, CreatorID, PollState) ->
     AddVote = fun(ID, OptionIndex, Options) ->
                       case maps:is_key(OptionIndex, Options) of
                           true ->
-                              {ok, Weight} = contract_man:query_account_balance(ID),
-                              options_add_vote(ID, OptionIndex, Weight,
-                                               Options);
+                              options_add_vote(ID, PollHeight, OptionIndex, Options);
                           false ->
                               Options
                       end
@@ -159,6 +175,7 @@ do_get_poll_state3(PollID, CreatorID, PollState) ->
                  description = Description,
                  url = URL,
                  close_height = CloseHeight,
+                 closed = Closed,
                  options = Options},
     {ok, Poll}.
 
@@ -166,9 +183,9 @@ do_get_poll_state3(PollID, CreatorID, PollState) ->
 % Data Manipulation
 %%
 
-options_add_vote(ID, OptionIndex, Weight, Options) ->
+options_add_vote(ID, PollHeight, OptionIndex, Options) ->
     O = maps:get(OptionIndex, Options),
-    {ok, Weight} = contract_man:query_account_balance(ID),
+    {ok, Weight} = contract_man:query_account_balance(ID, PollHeight),
     Vote = #poll_vote{id = ID, weight = Weight},
 
     Votes = O#poll_option.votes,

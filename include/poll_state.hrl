@@ -18,5 +18,6 @@
          url = "" :: string(),
          % spec_ref = none :: none | vanillae:tx_hash(),
          close_height :: integer() | never_closes,
+         closed :: boolean(),
          options :: #{integer() => #poll_option{}}}).
 

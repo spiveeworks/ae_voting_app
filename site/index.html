@@ -17,8 +17,17 @@
             let title_cell = row.insertCell();
             title_cell.appendChild(document.createTextNode("" + element.id + ": "));
             title_cell.appendChild(a);
+
+            let close_status;
+            if (element.closed) {
+                close_height = "closed";
+            } else if (element.close_height == "never_closes") {
+                close_height = "never closes";
+            } else {
+                close_height = element.close_height;
+            }
             row.insertCell()
-               .appendChild(document.createTextNode(element.close_height));
+               .appendChild(document.createTextNode(close_height));
         }
 
         // Generate the head AFTER the body, because of course.
