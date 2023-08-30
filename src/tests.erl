@@ -110,10 +110,16 @@ adt_test() ->
     Key = get_key(),
     ID = Key#keypair.public,
 
-    Args = [#{"x" => ["NoInts", {"OneInt", 100},
-                      {"TwoInts", 10, 20},
-                      {"NoInts"}],
-              "y" => {5, 6}}],
+    Args = [#{"x" => ["NoInts",
+                      {"OneInt", 100},
+                      {"TwoInts", 20, true},
+                      {"NoInts"}, "OtherNumberOfInts",
+                      {"ManyInts", #{0 => 0,
+                                     1 => "thirty",
+                                     "two" => 2,
+                                     "three" => "fifty"}},
+                      false],
+              "y" => {5, true}}],
     {ok, _CreateTX} = vanillae:contract_create(ID, "contracts/ADT_Test.aes", Args),
 
     ok.

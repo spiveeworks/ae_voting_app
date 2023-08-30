@@ -1,6 +1,6 @@
 
 contract ADT_Test =
-  datatype adt = NoInts | OneInt(int) | TwoInts(int, int)
+  datatype adt = NoInts | OneInt(int) | TwoInts(int, int) | ManyInts(map(int, int))
   type aliased('a) = ('a * 'a)
   record rec = {x : list(adt), y : aliased(int)}
 
