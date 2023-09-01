@@ -10,7 +10,7 @@
 
 -include("poll_state.hrl").
 
--record(gts, {registry_id :: vanillae:contract_id(),
+-record(gts, {registries :: [#registry{}],
               timer = none :: none | reference()}).
 
 %%
@@ -34,7 +34,7 @@ request_full_state() ->
 %%
 
 init({}) ->
-    {ok, [RegistryID]} = file:consult("registry_id"),
+    {ok, Registries} = poll_state:load_registries("registry_id"),
     % Start a timer straight away. We are starting either because the
     % application as a whole just started, or because we died and the
     % supervisor is restarting us. In the first case the poll_keeper will
@@ -42,13 +42,13 @@ init({}) ->
     % we want to restart the timer, so we do here. In theory the poll_keeper
     % might also have gone down, in which case it has a minute to restart. ;)
     Ref = erlang:start_timer(60000, self(), update_state),
-    {ok, #gts{registry_id = RegistryID, timer = Ref}}.
+    {ok, #gts{registries = Registries, timer = Ref}}.
 
 handle_call({get_poll_state, Contract}, _, State) ->
     Result = do_get_poll_state(Contract),
     {reply, Result, State};
 handle_call(get_full_state, _, State) ->
-    Result = do_get_full_state(State#gts.registry_id),
+    Result = do_get_full_state(State#gts.registries),
     {reply, Result, State}.
 
 handle_cast(request_full_state, State) ->
@@ -56,13 +56,13 @@ handle_cast(request_full_state, State) ->
         none -> ok;
         OldRef -> erlang:cancel_timer(OldRef)
     end,
-    NewState = do_send_full_state(State#gts.registry_id),
+    NewState = do_send_full_state(State#gts.registries),
     {noreply, NewState}.
 
 handle_info({timeout, Ref, update_state}, State) ->
     NewState = case State#gts.timer of
                    Ref ->
-                       do_send_full_state(State#gts.registry_id);
+                       do_send_full_state(State#gts.registries);
                    _ ->
                        % do nothing
                        State
@@ -73,18 +73,18 @@ handle_info({timeout, Ref, update_state}, State) ->
 % Doers
 %%
 
-do_send_full_state(RegistryID) ->
-    case do_get_full_state(RegistryID) of
+do_send_full_state(Registries) ->
+    case do_get_full_state(Registries) of
         {ok, Polls} ->
             poll_keeper ! {ground_truth, Polls};
         {error, _} ->
             ok
     end,
     Ref = erlang:start_timer(60000, self(), update_state),
-    #gts{registry_id = RegistryID, timer = Ref}.
+    #gts{registries = Registries, timer = Ref}.
 
-do_get_full_state(RegistryID) ->
-    case contract_man:query_polls(RegistryID) of
+do_get_full_state([Reg6, Reg7]) ->
+    case poll_state:load_poll_list([Reg6, Reg7]) of
         {ok, PollMap} ->
             do_get_full_state2(PollMap);
         {error, Error} ->
@@ -98,8 +98,7 @@ do_get_full_state2(PollMap) ->
     end.
 
 do_get_full_state3(PollMap, CurrentHeight) ->
-    ConvertPoll = fun(_Index, PollInfo) ->
-                          PollID = maps:get("poll", PollInfo),
+    ConvertPoll = fun(_Index, PollID) ->
                           case do_get_poll_state2(PollID, CurrentHeight) of
                               {ok, Poll} -> {true, Poll};
                               {error, _} -> false

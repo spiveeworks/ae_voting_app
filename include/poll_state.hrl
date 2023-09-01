@@ -21,3 +21,7 @@
          closed :: boolean(),
          options :: #{integer() => #poll_option{}}}).
 
+-record(registry,
+        {version :: integer(),
+         chain_id :: vanillae:contract_id()}).
+

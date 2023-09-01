@@ -6,6 +6,8 @@
 
 -record(keypair, {public :: string(), private :: binary()}).
 
+-include("poll_state.hrl").
+
 make_keypair() ->
     #{ public := Pub, secret := Priv } = enacl:sign_keypair(),
     PubBin = aeser_api_encoder:encode(account_pubkey, Pub),
@@ -52,11 +54,11 @@ get_pubkey() ->
     K#keypair.public.
 
 
-create_poll_registry() ->
+create_poll_registry(Version) ->
     Key = get_key(),
     CreatorID = Key#keypair.public,
 
-    {ok, CreateTX} = contract_man:create_registry(CreatorID),
+    {ok, CreateTX} = contract_man:create_registry(CreatorID, Version),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
 
@@ -89,11 +91,11 @@ create_poll_contract() ->
     #{"tx_hash" := Hash} = Result,
     {ok, Hash}.
 
-add_poll_to_registry(RegistryContract, PollContract) ->
+add_poll_to_registry(Registry, PollContract) ->
     Key = get_key(),
     ID = Key#keypair.public,
 
-    {ok, {ResultType, TX}} = contract_man:register_poll(ID, RegistryContract,
+    {ok, {ResultType, TX}} = contract_man:register_poll(ID, Registry,
                                                         PollContract, true),
     io:format("Result type: ~p~n", [ResultType]),
 
@@ -124,7 +126,7 @@ adt_test() ->
 
     ok.
 
-create_and_add_poll(RegistryID) ->
+create_and_add_poll(Registry) ->
     {ok, Hash} = create_poll_contract(),
     io:format("~nTransaction hash: ~n~s~n", [Hash]),
 
@@ -139,19 +141,19 @@ create_and_add_poll(RegistryID) ->
     {ok, PollInfo} = vanillae:contract(PollID),
     io:format("Poll info:~n~p~n", [PollInfo]),
 
-    {ok, RegistryInfo} = vanillae:contract(RegistryID),
+    {ok, RegistryInfo} = vanillae:contract(Registry#registry.chain_id),
     io:format("Registry info:~n~p~n", [RegistryInfo]),
 
-    add_poll_to_registry(RegistryID, PollID),
+    add_poll_to_registry(Registry, PollID),
     io:format("Incubator state: ~p~n", [incubator:get_state()]),
 
     ok.
 
-create_registry_and_poll_parallel() ->
+create_registry_and_poll_parallel(Version) ->
     Key = load_keypair("dryrun_keypair"),
     CreatorID = Key#keypair.public,
 
-    {ok, CreateTX} = contract_man:create_registry(CreatorID),
+    {ok, CreateTX} = contract_man:create_registry(CreatorID, Version),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
 
@@ -168,9 +170,10 @@ create_registry_and_poll_parallel() ->
                        {subscribe_tx, "create poll", B} -> B
                    end,
 
-    add_poll_to_registry(RegistryID, PollID),
+    Registry = #registry{chain_id = RegistryID, version = Version},
+    add_poll_to_registry(Registry, PollID),
 
-    RegistryID.
+    Registry.
 
 vote_poll(PollIndex, Option) ->
     Key = get_key(),
@@ -194,12 +197,14 @@ vote_poll_wait(PollIndex, Option) ->
 run_tests() ->
     %adt_test(),
 
-    %RegistryID = create_registry_and_poll_parallel(),
-    %create_and_add_poll(RegistryID),
+    %Registry = create_registry_and_poll_parallel(7),
+    %create_and_add_poll(Registry),
 
-    %RegistryID = poll_keeper:get_registry_address(),
+    %{ok, [_Reg6, Reg7]} = poll_state:load_registries("registry_id"),
 
-    %create_and_add_poll(RegistryID),
+    %RegistryID = create_poll_registry(7),
+
+    %create_and_add_poll(Reg7),
 
     %PollID = 9,
 

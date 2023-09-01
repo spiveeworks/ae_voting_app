@@ -1,6 +1,8 @@
 -module(poll_state).
 
--export([update_vote/4, poll_lookup_user/2]).
+-export([load_registries/1, load_poll_list/1, update_vote/4, poll_lookup_user/2]).
+
+% TODO: move some ground state functions to here?
 
 %%
 % State
@@ -11,6 +13,53 @@
 %%
 % Data Manipulation
 %%
+
+load_registries(Path) ->
+    case file:consult(Path) of
+        {ok, Terms} ->
+            form_registry_records(Terms, []);
+        Error ->
+            Error
+    end.
+
+form_registry_records([#{version := Version, chain_id := ID} | Rest], Acc) when is_integer(Version) ->
+    Reg = #registry{version = Version, chain_id = ID},
+    form_registry_records(Rest, [Reg | Acc]);
+form_registry_records([T | _], _) ->
+    {error, {bad_registry, T}};
+form_registry_records([], Acc) ->
+    {ok, lists:reverse(Acc)}.
+
+% Uses the list of registries from load_registries/1
+load_poll_list(Registries) ->
+    load_poll_list(Registries, #{}, 0).
+
+load_poll_list([Registry | Rest], PollAcc, NextIndex) ->
+    case contract_man:query_polls(Registry) of
+        {ok, Polls} ->
+            io:format("Added ~p polls, starting at index ~p.~n", [maps:size(Polls), NextIndex]),
+            {NewPolls, NewIndex} = combine_polls(PollAcc, NextIndex, Polls),
+            load_poll_list(Rest, NewPolls, NewIndex);
+        {error, Error} ->
+            {error, Error}
+    end;
+load_poll_list([], Polls, _) ->
+    {ok, Polls}.
+
+combine_polls(PollAcc, NextIndex, NextPolls) when NextPolls == #{} ->
+    % short circuit to avoid calculating min and max of an empty list
+    {PollAcc, NextIndex};
+combine_polls(PollAcc, NextIndex, NextPolls) ->
+    Indices = maps:keys(NextPolls),
+    Min = lists:min(Indices),
+    Max = lists:max(Indices),
+    Offset = NextIndex - Min,
+    NewMax = Max + Offset,
+    AddPoll = fun(Index, Poll, Acc) ->
+                      maps:put(Index + Offset, Poll, Acc)
+              end,
+    NewPolls = maps:fold(AddPoll, PollAcc, NextPolls),
+    {NewPolls, NewMax + 1}.
 
 update_vote(PollIndex, ID, NewOption, Polls) ->
     Poll = maps:get(PollIndex, Polls),
