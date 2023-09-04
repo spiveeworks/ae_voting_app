@@ -40,13 +40,15 @@ main contract Registry =
   type delegations = map(address, address)
 
   record state =
-    { polls : polls
+    { prototype : Poll_v2
+    , polls : polls
     , seq_id : int
     , delegations : delegations
     , created_height : int }
 
-  entrypoint init() : state =
-    { polls = {},
+  entrypoint init(prototype : Poll_v2) : state =
+    { prototype = prototype,
+      polls = {},
       seq_id = 0,
       delegations = {},
       created_height = Chain.block_height }
@@ -65,7 +67,7 @@ main contract Registry =
     poll_seq_id
 
   stateful entrypoint create_poll(metadata : Poll_v2_Types.metadata, vote_options : Poll_v2_Types.vote_option, close_height : option(int)) : int =
-    let poll = Chain.create(metadata, vote_options, close_height) : Poll_v2
+    let poll = Chain.clone(ref=state.prototype, metadata, vote_options, close_height) : Poll_v2
     // We could make this work with explicit subtype polymorphism, but we don't.
     // Honestly we should either add vote entrypoints to the interface, or just
     // use bare addresses.
@@ -101,7 +103,7 @@ main contract Registry =
     let filter_delegations_account = (delegation_tuple) => Pair.snd(delegation_tuple) == account
     Map.from_list(List.filter(filter_delegations_account, Map.to_list(state.delegations)))
 
-  entrypoint version() : int = 2
+  entrypoint version() : int = 3
 
   // INTERNAL HELPER FUNCTIONS
 

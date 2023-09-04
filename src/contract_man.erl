@@ -2,7 +2,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([create_registry/2, query_polls_tx/2, query_polls/1, create_poll/8,
+-export([create_registry/3, query_polls_tx/2, query_polls/1, create_poll/8,
          register_poll/4, query_poll_state/1, query_account_balance/2,
          vote_tx/3]).
 -export([init/1, handle_call/3, handle_cast/2]).
@@ -18,8 +18,8 @@ start_link() ->
 %%%%%%%%%%%%%
 % Interface
 
-create_registry(ID, Version) ->
-    gen_server:call(?MODULE, {create_registry, ID, Version}).
+create_registry(ID, Version, Prototype) ->
+    gen_server:call(?MODULE, {create_registry, ID, Version, Prototype}).
 
 query_polls_tx(ID, Registry) ->
     gen_server:call(?MODULE, {query_polls_tx, ID, Registry}).
@@ -27,8 +27,8 @@ query_polls_tx(ID, Registry) ->
 query_polls(Registry) ->
     gen_server:call(?MODULE, {query_polls, Registry}).
 
-create_poll(ID, Registry, Title, Description, Link, SpecRef, Options, Age) ->
-    gen_server:call(?MODULE, {create_poll, ID, Registry, Title, Description,
+create_poll(ID, RegistryID, Title, Description, Link, SpecRef, Options, Age) ->
+    gen_server:call(?MODULE, {create_poll, ID, RegistryID, Title, Description,
                               Link, SpecRef, Options, Age}).
 
 register_poll(ID, Registry, PollID, Listed) ->
@@ -71,8 +71,8 @@ init({}) ->
 
     {ok, State}.
 
-handle_call({create_registry, ID, Version}, _, State) ->
-    Result = do_create_registry(State, ID, Version),
+handle_call({create_registry, ID, Version, Prototype}, _, State) ->
+    Result = do_create_registry(State, ID, Version, Prototype),
     {reply, Result, State};
 handle_call({query_polls_tx, ID, Registry}, _, State) ->
     Result = do_query_polls_tx(State, ID, Registry),
@@ -100,10 +100,10 @@ handle_call({vote_tx, ID, PollID, Option}, _, State) ->
 handle_cast(_, State) ->
     {noreply, State}.
 
-do_create_registry(State, ID, Version) ->
+do_create_registry(State, ID, Version, Prototype) ->
     case maps:find(Version, State#cms.registry_info) of
         {ok, #ci{path = Path}} ->
-            vanillae:contract_create(ID, Path, []);
+            vanillae:contract_create(ID, Path, [Prototype]);
         error ->
             {error, unknown_version}
     end.
@@ -142,7 +142,7 @@ extract_polls(2, Polls) when is_map(Polls) ->
 extract_polls(3, Polls) ->
     Polls.
 
-do_create_poll(State, ID, Registry, Title, Description, Link, SpecRef, Options, Age) ->
+do_create_poll(State, ID, RegistryID, Title, Description, Link, SpecRef, Options, Age) ->
     RegistryInfo = maps:get(3, State#cms.registry_info),
     AACI = RegistryInfo#ci.aaci,
 
@@ -167,7 +167,7 @@ do_create_poll(State, ID, Registry, Title, Description, Link, SpecRef, Options, 
         error ->
             {error, top_height};
         _ ->
-            vanillae:contract_call(ID, AACI, Registry, "create_poll", PollArgs)
+            vanillae:contract_call(ID, AACI, RegistryID, "create_poll", PollArgs)
     end.
 
 do_register_poll(State, ID, #registry{chain_id = RegistryID, version = Version}, PollID, Listed) ->

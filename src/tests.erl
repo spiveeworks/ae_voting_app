@@ -58,7 +58,10 @@ create_poll_registry(Version) ->
     Key = get_key(),
     CreatorID = Key#keypair.public,
 
-    {ok, CreateTX} = contract_man:create_registry(CreatorID, Version),
+    {ok, [Reg | _]} = poll_state:load_registries("registry_id"),
+    {ok, #{0 := Prototype}} = poll_state:load_poll_list([Reg]),
+
+    {ok, CreateTX} = contract_man:create_registry(CreatorID, Version, Prototype),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
 
@@ -75,13 +78,13 @@ create_poll_registry(Version) ->
 registry_id() ->
     "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw".
 
-create_poll_contract() ->
+create_poll_contract(Registry) ->
     Key = get_key(),
     ID = Key#keypair.public,
 
     Description = "Dummy poll for testing the poll contract",
     Options = #{1 => "option 1", 2 => "option 2"},
-    {ok, CreateTX} = contract_man:create_poll(ID, "Test Poll", Description,
+    {ok, CreateTX} = contract_man:create_poll(ID, Registry, "Test Poll", Description,
                                               "example.com", none, Options,
                                               never_closes),
 
@@ -90,23 +93,6 @@ create_poll_contract() ->
     {ok, Result} = vanillae:post_tx(SignedTX),
     #{"tx_hash" := Hash} = Result,
     {ok, Hash}.
-
-add_poll_to_registry(Registry, PollContract) ->
-    Key = get_key(),
-    ID = Key#keypair.public,
-
-    {ok, {ResultType, TX}} = contract_man:register_poll(ID, Registry,
-                                                        PollContract, true),
-    io:format("Result type: ~p~n", [ResultType]),
-
-    SignedTX = sign_transaction_base58(Key#keypair.private, TX),
-
-    {ok, Result} = vanillae:post_tx(SignedTX),
-    #{"tx_hash" := Hash} = Result,
-
-    incubator:add_register_hash("Test Poll", PollContract, Hash),
-
-    ok.
 
 adt_test() ->
     Key = get_key(),
@@ -125,55 +111,6 @@ adt_test() ->
     {ok, _CreateTX} = vanillae:contract_create(ID, "contracts/ADT_Test.aes", Args),
 
     ok.
-
-create_and_add_poll(Registry) ->
-    {ok, Hash} = create_poll_contract(),
-    io:format("~nTransaction hash: ~n~s~n", [Hash]),
-
-    incubator:add_poll_hash("Test Poll", Hash),
-    io:format("Incubator state: ~p~n", [incubator:get_state()]),
-
-    query_man:subscribe_tx_contract(self(), "create poll", Hash),
-    {ok, PollID} = receive
-                       {subscribe_tx, "create poll", A} -> A
-                   end,
-    io:format("Contract id: ~s~n", [PollID]),
-    {ok, PollInfo} = vanillae:contract(PollID),
-    io:format("Poll info:~n~p~n", [PollInfo]),
-
-    {ok, RegistryInfo} = vanillae:contract(Registry#registry.chain_id),
-    io:format("Registry info:~n~p~n", [RegistryInfo]),
-
-    add_poll_to_registry(Registry, PollID),
-    io:format("Incubator state: ~p~n", [incubator:get_state()]),
-
-    ok.
-
-create_registry_and_poll_parallel(Version) ->
-    Key = load_keypair("dryrun_keypair"),
-    CreatorID = Key#keypair.public,
-
-    {ok, CreateTX} = contract_man:create_registry(CreatorID, Version),
-
-    SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
-
-    query_man:post_tx_contract(self(), "create poll registry", SignedTX),
-    {ok, Hash} = create_poll_contract(),
-    io:format("~nTransaction hash: ~n~s~n", [Hash]),
-    query_man:subscribe_tx_contract(self(), "create poll", Hash),
-
-    {ok, RegistryID} = receive
-                           {subscribe_tx, "create poll registry", A} -> A
-                       end,
-
-    {ok, PollID} = receive
-                       {subscribe_tx, "create poll", B} -> B
-                   end,
-
-    Registry = #registry{chain_id = RegistryID, version = Version},
-    add_poll_to_registry(Registry, PollID),
-
-    Registry.
 
 vote_poll(PollIndex, Option) ->
     Key = get_key(),
@@ -202,7 +139,22 @@ add_poll_registry(Version) ->
     Registries = OldRegistries ++ [#registry{version = Version,
                                              chain_id = Contract}],
 
-    poll_state:store_registries("registry_id", Registries).
+    poll_state:store_registries("registry_id", Registries),
+
+    Contract.
+
+create_poll_and_registry() ->
+    Registry = add_poll_registry(3),
+    {ok, TH} = create_poll_contract(Registry),
+
+    query_man:subscribe_tx_info(self(), "create poll", TH),
+    receive
+        {subscribe_tx, "create poll", Info} ->
+            io:format("Info: ~p~n", [Info])
+    end,
+
+    ok.
+
 
 run_tests() ->
     %adt_test(),
@@ -225,6 +177,8 @@ run_tests() ->
     %vote_poll_wait(PollID, revoke),
     %{ok, PollAfter2} = poll_keeper:get_poll(PollID),
     %io:format("Poll ~p: ~p~n", [PollID, element(7, PollAfter2)]),
+
+    % create_poll_and_registry(),
 
     ok.
 

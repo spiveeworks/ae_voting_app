@@ -53,6 +53,7 @@ load_poll_list([Registry | Rest], PollAcc, NextIndex) ->
             {NewPolls, NewIndex} = combine_polls(PollAcc, NextIndex, Polls),
             load_poll_list(Rest, NewPolls, NewIndex);
         {error, Error} ->
+            io:format("Error loading poll list: ~p.~n", [Error]),
             {error, Error}
     end;
 load_poll_list([], Polls, _) ->
