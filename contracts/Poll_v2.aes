@@ -22,7 +22,7 @@
 
 include "String.aes"
 
-contract Pollv2 =
+namespace Poll_v2_Types =
 
   record metadata =
     { title : string
@@ -32,11 +32,13 @@ contract Pollv2 =
 
   type vote_option = map(int, string)
 
+contract Poll_v2 =
+
   type votes = map(address, int)
 
   record state =
-    { metadata : metadata
-    , vote_options : vote_option
+    { metadata : Poll_v2_Types.metadata
+    , vote_options : Poll_v2_Types.vote_option
     , close_height : option(int)
     , create_height : int
     , votes : votes
@@ -46,7 +48,7 @@ contract Pollv2 =
       Vote(address, address, int)
     | RevokeVote(address, address)
 
-  entrypoint init(metadata : metadata, vote_options : vote_option, close_height : option(int)) : state =
+  entrypoint init(metadata : Poll_v2_Types.metadata, vote_options : Poll_v2_Types.vote_option, close_height : option(int)) : state =
     require(String.length(metadata.title) =< 50, "TITLE_STRING_TO_LONG")
     require(String.length(metadata.description) =< 300, "DESCRIPTION_STRING_TO_LONG")
     { metadata = metadata,
@@ -76,7 +78,7 @@ contract Pollv2 =
 
   entrypoint close_height() : option(int) = state.close_height
 
-  entrypoint metadata() : metadata = state.metadata
+  entrypoint metadata() : Poll_v2_Types.metadata = state.metadata
 
   entrypoint votes() : votes = state.votes
 

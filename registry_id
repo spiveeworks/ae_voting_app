@@ -1,2 +1,4 @@
-#{version => 2, chain_id => "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw"}.
-#{version => 3, chain_id => "ct_2qW9cyZCTqE3goERyc7GGs3AtXwfSCq1vAPuiHx6gxNMDLTAg6"}.
+#{version => 2,
+  chain_id => "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw"}.
+#{version => 3,
+  chain_id => "ct_23Z59V8uhEtDjTamSsSUC4rES8CPoEXuccDCC2bGoYMe24s1hJ"}.

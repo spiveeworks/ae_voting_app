@@ -6,134 +6,6 @@
     import * as sk from "../sidekick.js";
     import * as aev from "/aev_util.js";
 
-    var polls_loaded = false;
-
-    async function login() {
-        let login_success = await aev.login();
-        if (!login_success) return;
-
-        if (!polls_loaded) {
-            // There may be unregistered polls, so use authority to display them.
-            let submit_resp = await aev.request_and_sign("/api/unregisteredPolls", {});
-            if (submit_resp.ok) {
-                console.log(submit_resp);
-                let polls = submit_resp.body.unregistered_polls;
-
-                // flag to make sure we don't add to the tables twice
-                polls_loaded = true;
-
-                generatePollTable(polls);
-            }
-        }
-    }
-
-    function generatePollRow(table, title, contract_address) {
-        let row = table.insertRow();
-
-        row.insertCell()
-           .appendChild(document.createTextNode(title));
-        row.insertCell()
-           .appendChild(document.createTextNode(contract_address));
-
-        let register = document.createElement("button");
-        register.addEventListener("click", registerPollCallback);
-        register.innerText = "register";
-        row.insertCell()
-            .appendChild(register);
-
-        if (table.rows.length == 1) {
-            // Generate the head as soon as one row is added
-            let thead = table.createTHead();
-            let row = thead.insertRow();
-
-            let th1 = document.createElement("th");
-            th1.appendChild(document.createTextNode("Title"));
-            row.appendChild(th1);
-
-            let th2 = document.createElement("th");
-            th2.appendChild(document.createTextNode("Address"));
-            row.appendChild(th2);
-        }
-    }
-
-    function generatePollTable(polls) {
-        let out = document.getElementById("unregistered_list_status");
-
-        let table = document.getElementById("unregistered_polls_table");
-
-        if (polls.length == 0) {
-            out.textContent = "There were no unregistered polls when you selected this account.";
-        } else {
-            out.textContent = "";
-            for (let poll of polls) {
-                generatePollRow(table, poll.title, poll.contract_address);
-            }
-        }
-    }
-
-    async function registerPoll(contract_address) {
-        let request = {
-            contract_address: contract_address
-        };
-
-        let post_resp = await aev.form_and_post("/api/registerPoll", request);
-
-        let out = document.getElementById("unregistered_list_status");
-        if (post_resp.ok) {
-            out.textContent = "Poll is being registered.";
-            // remove rows from the table with this contract address
-            let table = document.getElementById("unregistered_polls_table");
-            let rows = table.rows;
-            for (var i = 1; i < rows.length; i++) {
-                let this_address = rows[i].cells[1].textContent;
-                if (contract_address == this_address) {
-                    table.deleteRow(i);
-                    // decrement to cancel out the loop increment, to check the row that replaces this one
-                    i--;
-                }
-            }
-            if (table.rows.length == 1) {
-                // the only row left is the header, so remove that too
-                table.deleteRow(0);
-                let count_resp = await fetch("/api/unregisteredPolls/count");
-                if (count_resp.ok) {
-                    let result = await count_resp.json();
-                    if (result.unregistered_count != 0) {
-                        out.textContent = "Poll is being registered. Refresh to see remaining unregistered polls.";
-                    } else if (result.pending_registration_count != 0) {
-                        out.textContent = "Poll is being registered. Refresh to see if it succeeds.";
-                    } else if (result.pending_creation_count != 0) {
-                        out.textContent = "All polls have been registered, but another is being created. Refresh to see if it gets mined.";
-                    } else {
-                        out.textContent = "All polls have been registered.";
-                    }
-                }
-            }
-        } else {
-            out.textContent = "Failed to register poll.";
-        }
-        return post_resp;
-    }
-
-    function registerPollCallback(event) {
-        let button = event.target;
-
-        let table = document.getElementById("unregistered_polls_table");
-        let rows = table.rows;
-        for (var i = 1; i < rows.length; i++) {
-            let this_button = rows[i].cells[2].children[0];
-            if (button == this_button) { // double equals, yolo
-                let out = document.getElementById("unregistered_list_status");
-                out.textContent = "Attempting to register contract...";
-
-                let contract_address = rows[i].cells[1].textContent;
-                // asynchronous call
-                registerPoll(contract_address);
-                return;
-            }
-        }
-    }
-
     function removeOption(event) {
         let button = event.target;
 
@@ -215,24 +87,16 @@
 
         let post_resp = await aev.form_and_post("/api/createPoll", request);
         if (post_resp.ok && post_resp.body.contract_id != "not_mined") {
-            let contract_id = post_resp.body.contract_id;
-
-            let table = document.getElementById("unregistered_polls_table");
-            generatePollRow(table, title, contract_id);
-
-            out.textContent = "Contract created. Attempting to register contract...";
-            let register_resp = await
-            // asynchronous call
-            registerPoll(contract_id);
+            out.textContent = "Contract created.";
         } else {
-            out.textContent = "Refresh to check if a transaction has been mined.";
+            out.textContent = "";
         }
     }
 
     async function updateButtons() {
         let login_button = document.getElementById("login_button");
         login_button.innerText = "Select account";
-        login_button.onclick = login;
+        login_button.onclick = aev.login;
 
         let form = document.querySelector("form");
         form.addEventListener("submit", createPoll);
@@ -245,26 +109,6 @@
             let remove_button = option_table.rows[i].cells[2].children[0];
             remove_button.disabled = true;
             remove_button.addEventListener("click", removeOption);
-        }
-
-        let count_resp = await fetch("/api/unregisteredPolls/count");
-        let status = document.getElementById("unregistered_list_status");
-        if (count_resp.ok) {
-            let result = await count_resp.json();
-            if (result.unregistered_count == 0) {
-                polls_loaded = true;
-
-                if (result.pending_registration_count != 0) {
-                    status.textContent = "There is a poll still being registered, refresh to see if it has been mined.";
-                } else if (result.pending_creation_count != 0) {
-                    status.textContent = "There is a poll still being created, refresh to see if it has been mined.";
-                } else {
-                    status.textContent = "There were no unregistered polls when you last refreshed.";
-                }
-            }
-        }
-        if (!polls_loaded) {
-            status.textContent = "Select account to view unregistered polls.";
         }
     }
 

@@ -23,6 +23,8 @@
 include "List.aes"
 include "Pair.aes"
 
+include "Poll_v2.aes"
+
 contract interface Poll =
   entrypoint title : () => string
   entrypoint close_height : () => option(int)
@@ -56,11 +58,22 @@ main contract Registry =
 
   // STATEFULL FUNCTIONS
 
-  stateful entrypoint add_poll(poll : Poll, is_listed : bool) : int =
+  stateful function add_poll(poll : Poll) : int =
     let poll_seq_id = state.seq_id
     put(state{ polls[state.seq_id] = poll, seq_id = state.seq_id + 1 })
     Chain.event(AddPoll(poll, poll_seq_id))
     poll_seq_id
+
+  stateful entrypoint create_poll(metadata : Poll_v2_Types.metadata, vote_options : Poll_v2_Types.vote_option, close_height : option(int)) : int =
+    let poll = Chain.create(metadata, vote_options, close_height) : Poll_v2
+    // We could make this work with explicit subtype polymorphism, but we don't.
+    // Honestly we should either add vote entrypoints to the interface, or just
+    // use bare addresses.
+    add_poll(Address.to_contract(poll.address))
+
+  //stateful entrypoint register_poll(poll : Poll) : int =
+    //require(Call.caller has admin rights)
+    //add_poll(poll)
 
   stateful entrypoint delegate(delegatee : address) =
     require(Call.caller != delegatee, "CALLER_IS_DELEGATEE_DISALLOWED")

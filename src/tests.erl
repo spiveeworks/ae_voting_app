@@ -194,6 +194,16 @@ vote_poll_wait(PollIndex, Option) ->
 
     ok.
 
+add_poll_registry(Version) ->
+    Contract = create_poll_registry(Version),
+
+    {ok, OldRegistries} = poll_state:load_registries("registry_id"),
+
+    Registries = OldRegistries ++ [#registry{version = Version,
+                                             chain_id = Contract}],
+
+    poll_state:store_registries("registry_id", Registries).
+
 run_tests() ->
     %adt_test(),
 

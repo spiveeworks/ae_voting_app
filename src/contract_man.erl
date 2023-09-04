@@ -2,7 +2,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([create_registry/2, query_polls_tx/2, query_polls/1, create_poll/7,
+-export([create_registry/2, query_polls_tx/2, query_polls/1, create_poll/8,
          register_poll/4, query_poll_state/1, query_account_balance/2,
          vote_tx/3]).
 -export([init/1, handle_call/3, handle_cast/2]).
@@ -27,9 +27,9 @@ query_polls_tx(ID, Registry) ->
 query_polls(Registry) ->
     gen_server:call(?MODULE, {query_polls, Registry}).
 
-create_poll(ID, Title, Description, Link, SpecRef, Options, Age) ->
-    gen_server:call(?MODULE, {create_poll, ID, Title, Description, Link,
-                              SpecRef, Options, Age}).
+create_poll(ID, Registry, Title, Description, Link, SpecRef, Options, Age) ->
+    gen_server:call(?MODULE, {create_poll, ID, Registry, Title, Description,
+                              Link, SpecRef, Options, Age}).
 
 register_poll(ID, Registry, PollID, Listed) ->
     gen_server:call(?MODULE, {register_poll, ID, Registry, PollID, Listed}).
@@ -80,9 +80,9 @@ handle_call({query_polls_tx, ID, Registry}, _, State) ->
 handle_call({query_polls, Registry}, _, State) ->
     Result = do_query_polls(State, Registry),
     {reply, Result, State};
-handle_call({create_poll, ID, Title, Description, Link, SpecRef, Options, Age}, _, State) ->
-    Result = do_create_poll(State, ID, Title, Description, Link, SpecRef,
-                            Options, Age),
+handle_call({create_poll, ID, Registry, Title, Description, Link, SpecRef, Options, Age}, _, State) ->
+    Result = do_create_poll(State, ID, Registry, Title, Description, Link,
+                            SpecRef, Options, Age),
     {reply, Result, State};
 handle_call({register_poll, ID, Registry, PollID, Listed}, _, State) ->
     Result = do_register_poll(State, ID, Registry, PollID, Listed),
@@ -142,8 +142,9 @@ extract_polls(2, Polls) when is_map(Polls) ->
 extract_polls(3, Polls) ->
     Polls.
 
-do_create_poll(State, ID, Title, Description, Link, SpecRef, Options, Age) ->
-    Path = State#cms.poll_info#ci.path,
+do_create_poll(State, ID, Registry, Title, Description, Link, SpecRef, Options, Age) ->
+    RegistryInfo = maps:get(3, State#cms.registry_info),
+    AACI = RegistryInfo#ci.aaci,
 
     PollMetadata = #{"title" => Title,
                      "description" => Description,
@@ -163,8 +164,10 @@ do_create_poll(State, ID, Title, Description, Link, SpecRef, Options, Age) ->
     PollArgs = [PollMetadata, Options, CloseHeight],
 
     case CloseHeight of
-        error -> {error, top_height};
-        _ -> vanillae:contract_create(ID, Path, PollArgs)
+        error ->
+            {error, top_height};
+        _ ->
+            vanillae:contract_call(ID, AACI, Registry, "create_poll", PollArgs)
     end.
 
 do_register_poll(State, ID, #registry{chain_id = RegistryID, version = Version}, PollID, Listed) ->

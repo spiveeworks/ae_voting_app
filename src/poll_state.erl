@@ -1,6 +1,6 @@
 -module(poll_state).
 
--export([load_registries/1, load_poll_list/1, update_vote/4, poll_lookup_user/2]).
+-export([load_registries/1, store_registries/2, load_poll_list/1, update_vote/4, poll_lookup_user/2]).
 
 % TODO: move some ground state functions to here?
 
@@ -11,7 +11,7 @@
 -include("poll_state.hrl").
 
 %%
-% Data Manipulation
+% Registry file
 %%
 
 load_registries(Path) ->
@@ -29,6 +29,18 @@ form_registry_records([T | _], _) ->
     {error, {bad_registry, T}};
 form_registry_records([], Acc) ->
     {ok, lists:reverse(Acc)}.
+
+store_registries(Path, Registries) ->
+    Data = lists:foldl(fun append_registry_data/2, "", Registries),
+    file:write_file(Path, Data).
+
+append_registry_data(#registry{version = Version, chain_id = ID}, Acc) ->
+    Data = io_lib:format("~p.~n", [#{version => Version, chain_id => ID}]),
+    [Acc, Data].
+
+%%
+% Poll List Extraction
+%%
 
 % Uses the list of registries from load_registries/1
 load_poll_list(Registries) ->
@@ -60,6 +72,10 @@ combine_polls(PollAcc, NextIndex, NextPolls) ->
               end,
     NewPolls = maps:fold(AddPoll, PollAcc, NextPolls),
     {NewPolls, NewMax + 1}.
+
+%%
+% Poll State Manipulation
+%%
 
 update_vote(PollIndex, ID, NewOption, Polls) ->
     Poll = maps:get(PollIndex, Polls),

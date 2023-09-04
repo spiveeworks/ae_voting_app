@@ -83,8 +83,8 @@ do_send_full_state(Registries) ->
     Ref = erlang:start_timer(60000, self(), update_state),
     #gts{registries = Registries, timer = Ref}.
 
-do_get_full_state([Reg2, Reg3]) ->
-    case poll_state:load_poll_list([Reg2, Reg3]) of
+do_get_full_state(Registries) ->
+    case poll_state:load_poll_list(Registries) of
         {ok, PollMap} ->
             do_get_full_state2(PollMap);
         {error, Error} ->

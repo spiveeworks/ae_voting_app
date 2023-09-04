@@ -38,12 +38,7 @@ start(_Type, _Args) ->
             {"/api/setAccountPermissions/submitSig", aev_json_admin, set_permissions},
 
             {"/api/createPoll/formTransaction", aev_json_admin, form_poll_tx},
-            {"/api/createPoll/postTransaction", aev_json_admin, post_poll_tx},
-            {"/api/unregisteredPolls/formMessage", aev_json_admin, get_polls_form_message},
-            {"/api/unregisteredPolls/submitSig", aev_json_admin, get_polls},
-            {"/api/registerPoll/formTransaction", aev_json_admin, form_register_tx},
-            {"/api/registerPoll/postTransaction", aev_json_admin, post_register_tx},
-            {"/api/unregisteredPolls/count", aev_json_admin, unregistered_polls_count}
+            {"/api/createPoll/postTransaction", aev_json_admin, post_poll_tx}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(my_http_listener,

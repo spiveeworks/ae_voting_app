@@ -2,7 +2,7 @@
 -behavior(cowboy_handler).
 
 -export([init/2, allowed_methods/2]).
--export([content_types_provided/2, content_types_accepted/2, handle_post/2, handle_get/2]).
+-export([content_types_provided/2, content_types_accepted/2, handle_post/2]).
 
 init(Req, State) ->
     {cowboy_rest, Req, State}.
@@ -51,19 +51,7 @@ handle_post(Req, State = set_permissions) ->
 handle_post(Req, State = form_poll_tx) ->
     form_poll_tx(Req, State);
 handle_post(Req, State = post_poll_tx) ->
-    post_poll_tx(Req, State);
-handle_post(Req, State = get_polls_form_message) ->
-    form_message(Req, State, fun get_polls_convert/2, fun get_polls_payload/1);
-handle_post(Req, State = get_polls) ->
-    check_signature(Req, State, fun get_polls_convert/2,
-                    fun get_polls_payload/1, fun get_polls/1);
-handle_post(Req, State = form_register_tx) ->
-    form_register_tx(Req, State);
-handle_post(Req, State = post_register_tx) ->
-    post_register_tx(Req, State).
-
-handle_get(Req, State = unregistered_polls_count) ->
-    unregistered_polls_count(Req, State).
+    post_poll_tx(Req, State).
 
 %%%%%%%%%%%%%%%%%
 % Generic Logic
@@ -332,12 +320,15 @@ form_poll_tx3(Req0, State, ID, Title, Description, URL, LifetimeBinary, OptionsL
                        LifetimeList = unicode:characters_to_list(LifetimeBinary),
                        list_to_integer(LifetimeList)
                end,
-    case contract_man:create_poll(ID, Title, Description, URL, SpecRef, Options, Lifetime) of
+    case contract_man:create_poll(ID, poll_keeper:get_registry_address(),
+                                  Title, Description, URL, SpecRef, Options,
+                                  Lifetime) of
         {ok, TX} ->
             Data = zj:encode(#{tx => TX}),
             Req1 = cowboy_req:set_resp_body(Data, Req0),
             {true, Req1, State};
-        {error, _} ->
+        {error, Reason} ->
+            io:format("Failed: ~p~n", [Reason]),
             {false, Req0, State}
     end.
 
@@ -358,10 +349,9 @@ post_poll_tx(Req0, State) ->
                <<"lifetime">> := Lifetime,
                <<"options">> := Options,
                <<"address">> := ID,
-               <<"signed_tx">> := SignedTX,
-               <<"wait_until_mined">> := Wait}, Req1} ->
+               <<"signed_tx">> := SignedTX}, Req1} ->
             post_poll_tx2(Req1, State, ID, Title, Description, URL, Lifetime,
-                          Options, SignedTX, Wait);
+                          Options, SignedTX);
         {ok, Body, Req1} ->
             io:format("Invalid data received: ~p~n", [Body]),
             {false, Req1, State};
@@ -370,155 +360,26 @@ post_poll_tx(Req0, State) ->
             {false, Req1, State}
     end.
 
-post_poll_tx2(Req0, State, ID, Title, Description, URL, Lifetime, OptionsList, SignedTX, Wait) ->
+post_poll_tx2(Req0, State, ID, Title, Description, URL, Lifetime, OptionsList, SignedTX) ->
     case permissions:can_create_polls(ID) of
         true ->
             post_poll_tx3(Req0, State, ID, Title, Description, URL,
-                          Lifetime, OptionsList, SignedTX, Wait);
+                          Lifetime, OptionsList, SignedTX);
         false ->
             {false, Req0, State}
     end.
 
-post_poll_tx3(Req0, State, _ID, Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX, Wait) ->
+post_poll_tx3(Req0, State, _ID, _Title, _Description, _URL, _Lifetime, _OptionsList, SignedTX) ->
     case vanillae:post_tx(SignedTX) of
         {ok, #{"tx_hash" := TH}} ->
-            incubator:add_poll_hash(Title, TH),
-            post_poll_tx4(Req0, State, Wait, TH);
+            post_poll_tx4(Req0, State, TH);
         Error ->
             io:format("post_tx failed with ~p~n", [Error]),
             {false, Req0, State}
     end.
 
-post_poll_tx4(Req0, State, Wait, TH) ->
-    case Wait of
-        false ->
-            Data = zj:encode(#{"tx_hash" => TH, "contract_id" => "not_mined"}),
-            Req1 = cowboy_req:set_resp_body(Data, Req0),
-            {true, Req1, State};
-        true ->
-            post_poll_tx5(Req0, State, TH)
-    end.
-
-post_poll_tx5(Req0, State, TH) ->
-    query_man:subscribe_tx_contract(self(), "create poll", TH),
-    receive
-        {subscribe_tx, "create poll", {ok, Contract}} ->
-            Data = zj:encode(#{"tx_hash" => TH, "contract_id" => Contract}),
-            Req1 = cowboy_req:set_resp_body(Data, Req0),
-            {true, Req1, State};
-        {subscribe_tx, "create poll", {error, _}} ->
-            {false, Req0, State}
-    end.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% List Unregistered Polls
-
-unregistered_polls_count(Req, State) ->
-    IS = incubator:get_state(),
-    Unregistered = lists:filtermap(fun pending_poll_is_unregistered/1, IS),
-    PendingC = lists:filter(fun pending_poll_is_unmined/1, IS),
-    PendingR = lists:filter(fun pending_poll_is_being_registered/1, IS),
-    Data = zj:encode(#{"unregistered_count" => erlang:length(Unregistered),
-                       "pending_creation_count" => erlang:length(PendingC),
-                       "pending_registration_count" => erlang:length(PendingR)}),
-    {Data, Req, State}.
-
-pending_poll_is_unregistered({pending_poll, Title, {created, ID}, none}) ->
-    {true, #{title => Title, contract_address => ID}};
-pending_poll_is_unregistered(_) ->
-    false.
-
-pending_poll_is_unmined({pending_poll, _, {pending, _}, none}) ->
-    true;
-pending_poll_is_unmined(_) ->
-    false.
-
-pending_poll_is_being_registered({pending_poll, _, _, none}) ->
-    false;
-pending_poll_is_being_registered({pending_poll, _, _, _}) ->
-    true.
-
-get_polls_convert(ID, Body) when Body == #{} ->
-    case permissions:can_create_polls(ID) of
-        true -> {ok, {}};
-        false -> error
-    end;
-get_polls_convert(_, _) ->
-    error.
-
-get_polls_payload(_) ->
-    "view unregistered polls".
-
-get_polls(_) ->
-    IS = incubator:get_state(),
-    Unregistered = lists:filtermap(fun pending_poll_is_unregistered/1, IS),
-    #{unregistered_polls => Unregistered}.
-
-%%%%%%%%%%%%%%%%%%%%%
-% Poll Registration
-
-form_register_tx(Req0, State) ->
-    case aev_json_parse:parse_req_body(Req0) of
-        {ok, #{<<"contract_address">> := Contract,
-               <<"address">> := ID}, Req1} ->
-            form_register_tx2(Req1, State, ID, Contract);
-        {ok, Body, Req1} ->
-            io:format("Invalid data received: ~p~n", [Body]),
-            {false, Req1, State};
-        {error, Req1} ->
-            io:format("Failure.~n", []),
-            {false, Req1, State}
-    end.
-
-form_register_tx2(Req0, State, ID, Contract) ->
-    case permissions:can_create_polls(ID) of
-        true ->
-            form_register_tx3(Req0, State, ID, Contract);
-        false ->
-            {false, Req0, State}
-    end.
-
-form_register_tx3(Req0, State, ID, Contract) ->
-    case contract_man:register_poll(ID, poll_keeper:get_registry_address(), Contract, false) of
-        {ok, {_ResultType, TX}} ->
-            Data = zj:encode(#{tx => TX}),
-            Req1 = cowboy_req:set_resp_body(Data, Req0),
-            {true, Req1, State};
-        {error, _} ->
-            {false, Req0, State}
-    end.
-
-post_register_tx(Req0, State) ->
-    case aev_json_parse:parse_req_body(Req0) of
-        {ok, #{<<"contract_address">> := Contract,
-               <<"address">> := ID,
-               <<"signed_tx">> := SignedTX}, Req1} ->
-            post_register_tx2(Req1, State, ID, Contract, SignedTX);
-        {ok, Body, Req1} ->
-            io:format("Invalid data received: ~p~n", [Body]),
-            {false, Req1, State};
-        {error, Req1} ->
-            io:format("Failure.~n", []),
-            {false, Req1, State}
-    end.
-
-post_register_tx2(Req0, State, ID, Contract, SignedTX) ->
-    case permissions:can_create_polls(ID) of
-        true ->
-            post_register_tx3(Req0, State, ID, Contract, SignedTX);
-        false ->
-            {false, Req0, State}
-    end.
-
-post_register_tx3(Req0, State, _ID, Contract, SignedTX) ->
-    case vanillae:post_tx(SignedTX) of
-        {ok, #{"tx_hash" := TH}} ->
-            incubator:add_register_hash("Unknown", Contract, TH),
-            Data = zj:encode(#{"tx_hash" => TH}),
-            Req1 = cowboy_req:set_resp_body(Data, Req0),
-            {true, Req1, State};
-        Error ->
-            io:format("post_tx failed with ~p~n", [Error]),
-            {false, Req0, State}
-    end.
+post_poll_tx4(Req0, State, TH) ->
+    Data = zj:encode(#{"tx_hash" => TH}),
+    Req1 = cowboy_req:set_resp_body(Data, Req0),
+    {true, Req1, State}.
 
