@@ -57,9 +57,9 @@ load_contract_info(Path) ->
     #ci{path = Path, aaci = AACI}.
 
 init({}) ->
-    PollInfo = load_contract_info("contracts/Poll_Iris.aes"),
-    Registries = #{6 => load_contract_info("contracts/Registry_Compiler_v6.aes"),
-                   7 => load_contract_info("contracts/Registry_Compiler_v7.aes")},
+    PollInfo = load_contract_info("contracts/Poll_v2.aes"),
+    Registries = #{2 => load_contract_info("contracts/Registry_v2.aes"),
+                   3 => load_contract_info("contracts/Registry_v3.aes")},
 
     % TODO: Put this keypair stuff in a devoted key handling module? Stop
     %       storing a private key in the backend?
@@ -137,9 +137,9 @@ do_query_polls2(Version, PollsType, TX) ->
             Error
     end.
 
-extract_polls(6, Polls) when is_map(Polls) ->
+extract_polls(2, Polls) when is_map(Polls) ->
     maps:map(fun (_, #{"poll" := Poll}) -> Poll end, Polls);
-extract_polls(7, Polls) ->
+extract_polls(3, Polls) ->
     Polls.
 
 do_create_poll(State, ID, Title, Description, Link, SpecRef, Options, Age) ->

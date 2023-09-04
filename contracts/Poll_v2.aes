@@ -22,7 +22,7 @@
 
 include "String.aes"
 
-contract Poll =
+contract Pollv2 =
 
   record metadata =
     { title : string

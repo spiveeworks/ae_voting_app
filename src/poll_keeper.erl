@@ -71,11 +71,11 @@ get_filters() ->
 
 init({}) ->
     spawn(tests, run_tests, []),
-    {ok, [#{version := 6, chain_id := Reg6},
-          #{version := 7, chain_id := Reg7}]} = file:consult("registry_id"),
+    {ok, [#{version := 2, chain_id := _Reg2},
+          #{version := 3, chain_id := Reg3}]} = file:consult("registry_id"),
     {ok, Filters} = filters:load("filters"),
     % Just make up some nonsense and use the full state once we have it.
-    State = dummy_state(Reg7, Filters),
+    State = dummy_state(Reg3, Filters),
     ground_truth:request_full_state(),
     io:format("Poll keeper created.~n", []),
     {ok, State}.
