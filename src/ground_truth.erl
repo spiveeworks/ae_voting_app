@@ -148,6 +148,8 @@ do_get_poll_state4(PollID, CurrentHeight, CreatorID, PollState) ->
                                 {"Some", Height} ->
                                     {Height, CurrentHeight >= Height}
                             end,
+    % If the poll is not closed we could just use query_account_balance/1, but
+    % setting the height like this and forgetting about it is easier.
     PollHeight = case Closed of
                      false -> CurrentHeight;
                      true -> CloseHeight

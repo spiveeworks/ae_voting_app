@@ -121,6 +121,9 @@ handle_cast({filter_account, ID, Category}, State) ->
 handle_info({subscribe_tx, {track_vote, PollIndex, ID, TH}, {ok, {}}}, State) ->
     NewState = do_track_vote_mined(PollIndex, ID, TH, State),
     {noreply, NewState};
+handle_info({subscribe_tx, {track_vote, _PollIndex, _ID, _TH}, {ok, Message}}, State) ->
+    io:format("vote failed: ~s~n", [Message]),
+    {noreply, State};
 handle_info({subscribe_tx, {track_vote, _PollIndex, _ID, _TH}, {error, Reason}}, State) ->
     io:format("vote failed: ~p~n", [Reason]),
     {noreply, State};

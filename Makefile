@@ -1,6 +1,6 @@
 # Simple deps are ones whose source directory is in deps/<name>/src
 # ...the rest were made by Craig :-)
-SIMPLE_DEPS := cowlib ranch cowboy zj aebytecode base58 enacl aeserialization eblake2 aesophia
+SIMPLE_DEPS := cowlib ranch cowboy zj aebytecode base58 ec_utils aeserialization eblake2 aesophia
 DEPS := $(SIMPLE_DEPS) zx vanillae
 DEPDIRS := $(patsubst %,deps/%,$(DEPS))
 
@@ -44,8 +44,8 @@ deps/aebytecode:
 	$(git-clone) https://github.com/aeternity/aebytecode.git deps/aebytecode --branch v3.2.0
 deps/base58:
 	$(git-clone) https://github.com/aeternity/erl-base58 deps/base58
-deps/enacl:
-	$(git-clone) https://github.com/aeternity/enacl.git deps/enacl
+deps/ec_utils:
+	$(git-clone) https://github.com/hanssv/ec_utils.git deps/ec_utils
 deps/aeserialization:
 	$(git-clone) https://github.com/aeternity/aeserialization.git deps/aeserialization --branch v1.0.0
 deps/eblake2:
@@ -66,11 +66,12 @@ deps/vanillae:
 # then copy them all over to some other location, or do some
 # application/release bundling, but whatever.
 
-vpath %.erl $(patsubst %,deps/%/src,$(SIMPLE_DEPS)) deps/zx/zomp/lib/otpr/zx/0.12.7/src deps/vanillae/bindings/erlang/src src
+ZXLIB := $(lastword $(wildcard deps/zx/zomp/lib/otpr/zx/*))
+vpath %.erl $(patsubst %,deps/%/src,$(SIMPLE_DEPS)) $(ZXLIB)/src deps/vanillae/bindings/erlang/src src
 
 ebin/%.beam: %.erl | ebin
 	@echo Compiling $<
-	@export zx_include=. && erlc -I deps -I deps/cowlib/include -I deps/aebytecode/include -I deps/aeserialization/include -I deps/zx/zomp/lib/otpr/zx/0.12.7/include -I include -o ebin -pa ebin $<
+	@export zx_include=. && erlc -I deps -I deps/cowlib/include -I deps/aebytecode/include -I deps/aeserialization/include -I $(ZXLIB)/include -I include -o ebin -pa ebin $<
 
 # aebytecode has some code generation that we will invoke directly.
 ebin/aeb_fate_asm.beam aeb_fate_code.beam: deps/aebytecode/include/aeb_fate_opcodes.hrl
@@ -80,9 +81,6 @@ $(AEB_GENERATED_SRC): ebin/aeb_fate_generate_ops.beam deps/aebytecode/src/aeb_fa
 
 priv:
 	mkdir priv
-
-priv/enacl_nif.so: deps/enacl/c_src/*.c | priv
-	gcc -fPIC -shared -lsodium -I /usr/lib/erlang/erts-*/include deps/enacl/c_src/*.c -o priv/enacl_nif.so
 
 # Applications. 'behaviours' is all of the files that need to be compiled
 # first, to suppress "behaviour undefined" warnings when compiling ranch,
@@ -104,7 +102,7 @@ cowboy: behaviours $(patsubst deps/cowboy/src/%.erl,ebin/%.beam,$(wildcard deps/
 zj: testdeps $(patsubst deps/zj/src/%.erl,ebin/%.beam,$(wildcard deps/zj/src/*.erl))
 aebytecode: testdeps $(patsubst deps/aebytecode/src/%.erl,ebin/%.beam,$(wildcard deps/aebytecode/src/*.erl)) ebin/aeb_fate_opcodes.beam ebin/aeb_fate_ops.beam ebin/aeb_fate_pp.beam
 base58: testdeps $(patsubst deps/base58/src/%.erl,ebin/%.beam,$(wildcard deps/base58/src/*.erl))
-enacl: testdeps $(patsubst deps/enacl/src/%.erl,ebin/%.beam,$(wildcard deps/enacl/src/*.erl)) priv/enacl_nif.so
+ec_utils: testdeps $(patsubst deps/ec_utils/src/%.erl,ebin/%.beam,$(wildcard deps/ec_utils/src/*.erl))
 aeserialization: testdeps $(patsubst deps/aeserialization/src/%.erl,ebin/%.beam,$(wildcard deps/aeserialization/src/*.erl))
 eblake2: testdeps $(patsubst deps/eblake2/src/%.erl,ebin/%.beam,$(wildcard deps/eblake2/src/*.erl))
 aesophia: testdeps $(patsubst deps/aesophia/src/%.erl,ebin/%.beam,$(wildcard deps/aesophia/src/*.erl))

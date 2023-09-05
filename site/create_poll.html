@@ -82,12 +82,14 @@
             wait_until_mined: true,
         };
 
-        let out = document.getElementById("unregistered_list_status");
+        let out = document.getElementById("status");
         out.textContent = "Attempting to make contract...";
 
         let post_resp = await aev.form_and_post("/api/createPoll", request);
-        if (post_resp.ok && post_resp.body.contract_id != "not_mined") {
-            out.textContent = "Contract created.";
+        if (post_resp.ok) {
+            // Can we add endpoints to check poll transactions that are being
+            // mined? We used to in v2 of the registry.
+            out.textContent = "Transaction created. Check poll list in a few minutes.";
         } else {
             out.textContent = "";
         }
@@ -120,13 +122,7 @@
 
 <button id="login_button">Loading...</button>
 
-<h2>Unregistered Polls</h2>
-
-<p id="unregistered_list_status">Checking to see if there are unregistered polls...</p>
-
-<table id="unregistered_polls_table">
-<!-- to be generated client-side --!>
-</table>
+<p id="status"></p>
 
 <h2>Create a New Poll</h2>
 

@@ -8,6 +8,14 @@ start() ->
     application:ensure_all_started(?MODULE).
 
 start(_Type, _Args) ->
+    Nodes = peer_list(),
+    vanillae:ae_nodes(Nodes),
+    %vanillae:ae_nodes([{"localhost",3013}]),
+    %vanillae:ae_nodes([{"testnet.aeternity.io",3013}]),
+    vanillae:network_id("ae_uat"),
+
+    {ok, SupRoot} = ae_voting_app_sup:start_link(),
+
     Dispatch = cowboy_router:compile([
         {'_', [
             {"/[polls]", cowboy_static, {file, "site/index.html"}},
@@ -46,13 +54,7 @@ start(_Type, _Args) ->
         #{env => #{dispatch => Dispatch}}
     ),
 
-    Nodes = peer_list(),
-    vanillae:ae_nodes(Nodes),
-    %vanillae:ae_nodes([{"localhost",3013}]),
-    %vanillae:ae_nodes([{"testnet.aeternity.io",3013}]),
-    vanillae:network_id("ae_uat"),
-
-    ae_voting_app_sup:start_link().
+    {ok, SupRoot}.
 
 peer_list() ->
     case file:consult("peerlist") of

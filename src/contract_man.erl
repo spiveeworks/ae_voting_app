@@ -3,8 +3,8 @@
 
 -export([start_link/0]).
 -export([create_registry/3, query_polls_tx/2, query_polls/1, create_poll/8,
-         register_poll/4, query_poll_state/1, query_account_balance/2,
-         vote_tx/3]).
+         register_poll/4, query_poll_state/1, vote_tx/3,
+         query_account_balance/1, query_account_balance/2]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
 -include("poll_state.hrl").
@@ -37,11 +37,21 @@ register_poll(ID, Registry, PollID, Listed) ->
 query_poll_state(PollID) ->
     gen_server:call(?MODULE, {query_poll_state, PollID}).
 
-query_account_balance(ID, PollHeight) ->
-    gen_server:call(?MODULE, {query_account_balance, ID, PollHeight}).
-
 vote_tx(ID, PollID, Option) ->
     gen_server:call(?MODULE, {vote_tx, ID, PollID, Option}).
+
+% TODO: move to poll_state.erl? 
+query_account_balance(ID) ->
+    case vanillae:acc(ID) of
+        {ok, #{"balance" := Balance}} -> {ok, Balance};
+        {error, Reason} -> {error, Reason}
+    end.
+
+query_account_balance(ID, PollHeight) ->
+    case vanillae:acc_at_height(ID, PollHeight) of
+        {ok, #{"balance" := Balance}} -> {ok, Balance};
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%%%%%%%%%%%%%%%%%
 % Implementation
@@ -89,9 +99,6 @@ handle_call({register_poll, ID, Registry, PollID, Listed}, _, State) ->
     {reply, Result, State};
 handle_call({query_poll_state, PollID}, _, State) ->
     Result = do_query_poll_state(State, PollID),
-    {reply, Result, State};
-handle_call({query_account_balance, ID, PollHeight}, _, State) ->
-    Result = do_query_account_balance(State, ID, PollHeight),
     {reply, Result, State};
 handle_call({vote_tx, ID, PollID, Option}, _, State) ->
     Result = do_vote_tx(State, ID, PollID, Option),
@@ -200,12 +207,6 @@ do_query_poll_state(State, PollID) ->
             dry_run(StateType, TX);
         Error ->
             Error
-    end.
-
-do_query_account_balance(_State, ID, PollHeight) ->
-    case vanillae:acc_at_height(ID, PollHeight) of
-        {ok, #{"balance" := Balance}} -> {ok, Balance};
-        {error, Reason} -> {error, Reason}
     end.
 
 do_vote_tx(State, ID, PollID, revoke) ->
