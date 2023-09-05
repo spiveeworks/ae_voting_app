@@ -132,7 +132,6 @@ async function form_and_post(endpoint, request) {
     if (!tx_resp.ok) return {ok: false};
 
     let tx = tx_resp.body.tx;
-    console.log({transaction: tx});
 
     // sign tx
     let signed_result = await sign_tx(logger, tx);

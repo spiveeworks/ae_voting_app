@@ -7,8 +7,6 @@
 init(Req, State) ->
     {cowboy_rest, Req, State}.
 
-allowed_methods(Req, State = unregistered_polls_count) ->
-    {[<<"GET">>, <<"OPTIONS">>], Req, State};
 allowed_methods(Req, State) ->
     {[<<"POST">>, <<"OPTIONS">>], Req, State}.
 

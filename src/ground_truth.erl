@@ -76,8 +76,10 @@ handle_info({timeout, Ref, update_state}, State) ->
 do_send_full_state(Registries) ->
     case do_get_full_state(Registries) of
         {ok, Polls} ->
+            io:format("Poll state formed.~n", []),
             poll_keeper ! {ground_truth, Polls};
-        {error, _} ->
+        {error, Reason} ->
+            io:format("Error forming poll state: ~p~n", [Reason]),
             ok
     end,
     Ref = erlang:start_timer(60000, self(), update_state),
@@ -86,6 +88,7 @@ do_send_full_state(Registries) ->
 do_get_full_state(Registries) ->
     case poll_state:load_poll_list(Registries) of
         {ok, PollMap} ->
+            io:format("Poll list loaded. Querying full poll state...~n", []),
             do_get_full_state2(PollMap);
         {error, Error} ->
             {error, Error}

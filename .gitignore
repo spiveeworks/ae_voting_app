@@ -7,7 +7,3 @@ priv/*.so
 
 # Dependencies
 deps
-
-# Admin Stuff
-keypair
-dryrun_keypair

@@ -1,1 +1,2 @@
-{"localhost", 3013}.
+{network, "ae_uat"}.
+{peers, [{"localhost", 3013}]}.
