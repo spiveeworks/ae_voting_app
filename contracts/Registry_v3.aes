@@ -33,7 +33,11 @@ contract interface Poll =
 
 main contract Registry =
 
-  type polls = map(int, Poll)
+  record poll_data =
+    { poll : Poll
+    , creator : address }
+
+  type polls = map(int, poll_data)
 
   // delegation from delegator to delegatee, delegatee will be globally allowed to take power of delegator
   // votes by delegator will overwrite delegation for one poll
@@ -60,9 +64,10 @@ main contract Registry =
 
   // STATEFULL FUNCTIONS
 
-  stateful function add_poll(poll : Poll) : int =
+  stateful function add_poll(poll : Poll, creator: address) : int =
     let poll_seq_id = state.seq_id
-    put(state{ polls[state.seq_id] = poll, seq_id = state.seq_id + 1 })
+    let poll_data = { poll = poll, creator = creator }
+    put(state{ polls[state.seq_id] = poll_data, seq_id = state.seq_id + 1 })
     Chain.event(AddPoll(poll, poll_seq_id))
     poll_seq_id
 
@@ -71,7 +76,7 @@ main contract Registry =
     // We could make this work with explicit subtype polymorphism, but we don't.
     // Honestly we should either add vote entrypoints to the interface, or just
     // use bare addresses.
-    add_poll(Address.to_contract(poll.address))
+    add_poll(Address.to_contract(poll.address), Call.caller)
 
   //stateful entrypoint register_poll(poll : Poll) : int =
     //require(Call.caller has admin rights)
@@ -110,4 +115,4 @@ main contract Registry =
   function require_poll_by_id(poll_id : int) : Poll =
     switch(Map.lookup(poll_id, state.polls))
       None => abort("POLL_ID_NOT_KNOWN")
-      Some(poll) => poll
+      Some(poll) => poll.poll

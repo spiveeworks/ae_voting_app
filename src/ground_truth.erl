@@ -1,7 +1,7 @@
 -module(ground_truth).
 -behaviour(gen_server).
 
--export([start_link/0, get_poll_state/1, get_full_state/0, request_full_state/0]).
+-export([start_link/0, get_full_state/0, request_full_state/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 %%
@@ -19,9 +19,6 @@
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, {}, []).
-
-get_poll_state(Contract) ->
-    gen_server:call(?MODULE, {get_poll_state, Contract}).
 
 get_full_state() ->
     gen_server:call(?MODULE, get_full_state).
@@ -44,9 +41,6 @@ init({}) ->
     Ref = erlang:start_timer(60000, self(), update_state),
     {ok, #gts{registries = Registries, timer = Ref}}.
 
-handle_call({get_poll_state, Contract}, _, State) ->
-    Result = do_get_poll_state(Contract),
-    {reply, Result, State};
 handle_call(get_full_state, _, State) ->
     Result = do_get_full_state(State#gts.registries),
     {reply, Result, State}.
@@ -101,8 +95,8 @@ do_get_full_state2(PollMap) ->
     end.
 
 do_get_full_state3(PollMap, CurrentHeight) ->
-    ConvertPoll = fun(_Index, PollID) ->
-                          case do_get_poll_state2(PollID, CurrentHeight) of
+    ConvertPoll = fun(_Index, PollInfo) ->
+                          case do_get_poll_state2(PollInfo, CurrentHeight) of
                               {ok, Poll} -> {true, Poll};
                               {error, _} -> false
                           end
@@ -110,13 +104,9 @@ do_get_full_state3(PollMap, CurrentHeight) ->
     Polls = maps:filtermap(ConvertPoll, PollMap),
     {ok, Polls}.
 
-do_get_poll_state(PollID) ->
-    case vanillae:top_height() of
-        {ok, CurrentHeight} -> do_get_poll_state2(PollID, CurrentHeight);
-        Error -> Error
-    end.
-
-do_get_poll_state2(PollID, CurrentHeight) ->
+do_get_poll_state2(#{"poll" := PollID, "creator" := CreatorID}, CurrentHeight) ->
+    do_get_poll_state3(PollID, CurrentHeight, CreatorID);
+do_get_poll_state2(#{"poll" := PollID}, CurrentHeight) ->
     case vanillae:contract(PollID) of
         {ok, #{"owner_id" := CreatorID}} ->
             do_get_poll_state3(PollID, CurrentHeight, CreatorID);

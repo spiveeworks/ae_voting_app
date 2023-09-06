@@ -130,24 +130,10 @@ do_query_polls(State, Registry) ->
 
     case do_query_polls_tx(State, ID, Registry) of
         {ok, {PollsType, TX}} ->
-            do_query_polls2(Registry#registry.version, PollsType, TX);
+            dry_run(PollsType, TX);
         Error ->
             Error
     end.
-
-do_query_polls2(Version, PollsType, TX) ->
-    case dry_run(PollsType, TX) of
-        {ok, Result} ->
-            Polls = extract_polls(Version, Result),
-            {ok, Polls};
-        Error ->
-            Error
-    end.
-
-extract_polls(2, Polls) when is_map(Polls) ->
-    maps:map(fun (_, #{"poll" := Poll}) -> Poll end, Polls);
-extract_polls(3, Polls) ->
-    Polls.
 
 do_create_poll(State, ID, RegistryID, Title, Description, Link, SpecRef, Options, Age) ->
     RegistryInfo = maps:get(3, State#cms.registry_info),
