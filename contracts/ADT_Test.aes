@@ -11,3 +11,11 @@ contract ADT_Test =
   entrypoint method(x : option(int), y : rec): int =
     let (z, _) = y.y
     z
+
+  entrypoint method2(x: adt): int =
+    let y = switch (x)
+      NoInts => 0
+      OneInt(y) => y
+      TwoInts(y, z) => y + z
+      ManyInts(xs) => xs[0]
+    y + 1

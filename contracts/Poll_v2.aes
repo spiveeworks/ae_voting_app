@@ -64,11 +64,18 @@ contract Poll_v2 =
     require(!is_closed(), "POLL_ALREADY_CLOSED")
     require(Map.member(option, state.vote_options), "VOTE_OPTION_NOT_KNOWN")
     put(state{ votes[Call.caller] = option})
-    Chain.event(Vote(Contract.address, Call.caller, option))
+    increase_option(5)
+    Chain.event(Vote(Contract.address, Call.caller, increase_option(2) / increase_option(3)))
 
   stateful entrypoint revoke_vote() =
     put(state{ votes = Map.delete(Call.caller, state.votes) })
     Chain.event(RevokeVote(Contract.address, Call.caller))
+
+  stateful entrypoint increase_option(by: int) =
+    let prev = state.votes[Call.caller]
+    let new = prev + by
+    put(state{ votes[Call.caller] = new })
+    new
 
   // STATELESS PUBLIC FUNCTIONS
 
@@ -82,7 +89,7 @@ contract Poll_v2 =
 
   entrypoint votes() : votes = state.votes
 
-  entrypoint is_author(author : address) : bool = state.author == author
+  entrypoint is_author(author : address) : bool = state.author == author || state.author == Call.caller
 
   entrypoint has_voted(voter : address) : bool = Map.member(voter, state.votes)
 

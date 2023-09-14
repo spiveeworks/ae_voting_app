@@ -128,6 +128,14 @@ run: all
 	@echo Running...
 	@export ERL_LIBS=sophia_stdlib && erl -pa ebin -name ae_voting_app@localhost -run ae_voting_app
 
+shell: all
+	@echo Launching Vanillae...
+	@export ERL_LIBS=sophia_stdlib && erl -pa ebin -run ae_voting_app start_vanillae
+
+fate: all
+	@echo Compiling contracts...
+	@export ERL_LIBS=sophia_stdlib && erl -pa ebin -noshell -run tests compile_all_fatecode
+
 clean:
 	rm -rf ebin/*.beam
 	rm -f $(AEB_GENERATED_SRC)
@@ -137,4 +145,4 @@ distclean:
 	rm -rf deps
 
 # More than twice as many phony targets as actual targets, lol.
-.PHONY: all testdeps pulldeps behaviours $(DEPS) objects run distclean clean
+.PHONY: all testdeps pulldeps behaviours $(DEPS) objects run shell fate distclean clean

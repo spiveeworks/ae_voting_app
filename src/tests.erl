@@ -182,3 +182,19 @@ run_tests() ->
 
     ok.
 
+compile_fatecode(Path, OutputPath) ->
+    case aeso_compiler:file(Path) of
+        {ok, #{fate_code := FC}} ->
+            Data = io_lib:format("~p.~n", [FC]),
+            file:write_file(OutputPath, Data),
+            io:format("Compiled ~s to ~s~n", [Path, OutputPath]);
+        {error, Reason} ->
+            io:format("Error in file ~s: ~p~n", [Path, Reason])
+    end.
+
+compile_all_fatecode() ->
+    compile_fatecode("contracts/ADT_Test.aes", "ADTs.fate"),
+    compile_fatecode("contracts/Poll_v2.aes", "poll.fate"),
+    compile_fatecode("contracts/Registry_v3.aes", "registry.fate"),
+    halt().
+

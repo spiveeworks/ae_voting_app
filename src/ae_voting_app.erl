@@ -1,18 +1,18 @@
 -module(ae_voting_app).
 -behaviour(application).
 
--export([start/0, start/2]).
+-export([start/0, start_vanillae/0, start/2]).
 -export([stop/1]).
 
 start() ->
     application:ensure_all_started(?MODULE).
 
+start_vanillae() ->
+    application:ensure_all_started(vanillae),
+    set_network().
+
 start(_Type, _Args) ->
-    {Network, Nodes} = network(),
-    vanillae:ae_nodes(Nodes),
-    %vanillae:ae_nodes([{"localhost",3013}]),
-    %vanillae:ae_nodes([{"testnet.aeternity.io",3013}]),
-    vanillae:network_id(Network),
+    set_network(),
 
     {ok, SupRoot} = ae_voting_app_sup:start_link(),
 
@@ -55,6 +55,11 @@ start(_Type, _Args) ->
     ),
 
     {ok, SupRoot}.
+
+set_network() ->
+    {Network, Nodes} = network(),
+    vanillae:ae_nodes(Nodes),
+    vanillae:network_id(Network).
 
 network() ->
     case file:consult("peerlist") of
