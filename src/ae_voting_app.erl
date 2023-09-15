@@ -8,11 +8,10 @@ start() ->
     application:ensure_all_started(?MODULE).
 
 start(_Type, _Args) ->
-    {Network, Nodes} = network(),
-    vanillae:ae_nodes(Nodes),
-    %vanillae:ae_nodes([{"localhost",3013}]),
-    %vanillae:ae_nodes([{"testnet.aeternity.io",3013}]),
+    {Network, TLS, Nodes} = network(),
     vanillae:network_id(Network),
+    vanillae:tls(TLS),
+    vanillae:ae_nodes(Nodes),
 
     {ok, SupRoot} = ae_voting_app_sup:start_link(),
 
@@ -58,13 +57,13 @@ start(_Type, _Args) ->
 
 network() ->
     case file:consult("peerlist") of
-        {ok, [{network, Network}, {peers, Peers}]} ->
-            {Network, Peers};
+        {ok, [{network, Network}, {tls, TLS}, {peers, Peers}]} ->
+            {Network, TLS, Peers};
         {ok, _} ->
             io:format("Error reading peerlist. Defaulting to ae_uat on localhost.~n", []),
-            {"ae_uat", [{"localhost", 3013}]};
+            {"ae_uat", false, [{"localhost", 3013}]};
         {error, enoent} ->
-            {"ae_uat", [{"localhost", 3013}]}
+            {"ae_uat", false, [{"localhost", 3013}]}
     end.
 
 stop(_State) ->

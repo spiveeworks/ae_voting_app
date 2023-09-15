@@ -52,6 +52,9 @@ load_poll_list([Registry | Rest], PollAcc, NextIndex) ->
             io:format("Added ~p polls, starting at index ~p.~n", [maps:size(Polls), NextIndex]),
             {NewPolls, NewIndex} = combine_polls(PollAcc, NextIndex, Polls),
             load_poll_list(Rest, NewPolls, NewIndex);
+        {error, Error} when is_list(Error) ->
+            io:format("Error loading poll list: ~s.~n", [Error]),
+            {error, Error};
         {error, Error} ->
             io:format("Error loading poll list: ~p.~n", [Error]),
             {error, Error}

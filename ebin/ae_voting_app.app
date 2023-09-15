@@ -3,7 +3,7 @@
 	{vsn, "0.1.0"},
 	{modules, ['counter','ae_voting_app','ae_voting_app_sup','hello_handler','restful']},
 	{registered, [ae_voting_app_sup]},
-	{applications, [kernel,stdlib,cowboy,vanillae]},
+	{applications, [kernel,stdlib,cowboy,inets,vanillae]},
 	{mod, {ae_voting_app, []}},
 	{env, []}
 ]}.

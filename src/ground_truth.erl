@@ -72,6 +72,9 @@ do_send_full_state(Registries) ->
         {ok, Polls} ->
             io:format("Poll state formed.~n", []),
             poll_keeper ! {ground_truth, Polls};
+        {error, Reason} when is_list(Reason) ->
+            io:format("Error forming poll state: ~s~n", [Reason]),
+            ok;
         {error, Reason} ->
             io:format("Error forming poll state: ~p~n", [Reason]),
             ok
