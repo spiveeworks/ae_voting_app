@@ -196,5 +196,7 @@ compile_all_fatecode() ->
     compile_fatecode("contracts/ADT_Test.aes", "ADTs.fate"),
     compile_fatecode("contracts/Poll_v2.aes", "poll.fate"),
     compile_fatecode("contracts/Registry_v3.aes", "registry.fate"),
+    compile_fatecode("contracts/Polymorphism.aes", "polymorphism.fate"),
+    compile_fatecode("contracts/Excess_Test.aes", "excess.fate"),
     halt().
 

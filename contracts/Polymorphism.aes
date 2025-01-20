@@ -1,0 +1,35 @@
+
+include "Func.aes"
+
+contract Polymorphism =
+    function f(x) = (x, x)
+
+    entrypoint g(x: int) = (f(x), f((x, x + 1)))
+
+    entrypoint takes_pair(x, y) = x + y
+
+    function takes_pair2(x, y) = x + y
+
+    function h(l) = (x) => (y) => l(x, y)
+
+    function i(l) = l(1)(2)
+
+    entrypoint use_h() =
+        let l = h((x, y) => x + y)
+        i(l)
+
+    entrypoint use_tp() =
+        let l = h(takes_pair)
+        i(l)
+
+    entrypoint use_tp2() =
+        let l = h(takes_pair2)
+        i(l)
+
+    entrypoint lc() =
+        [x + y | x <- [1,2,3,4,5], let k = x*x, if (k > 5), y <- [k, k+1, k+2]]
+
+    entrypoint lcpatt() =
+        [x | (x, 1) <- [(1, 1), (2, 2)]]
+
+    entrypoint stack_list(x) = [x + x, x * x, (x * x) - (x + x)]

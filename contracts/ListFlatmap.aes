@@ -1,0 +1,53 @@
+@compiler >= 6
+
+// ak_nJHj3EDRxNtGDPYh5dRPGKFkbcjo3S5GtzhBecRhH4NsHaWQe
+
+contract ListFlatmap =
+    public entrypoint build_lc() =
+        [x + y | x <- [1..4], let k = x * x, if (k > 5), y <- [k, k + 1, k + 2]]
+    public entrypoint build_flatmap() =
+        fm1([1..4])
+    function
+        fm1([]) = []
+        fm1(x :: xs) =
+            let k = x * x
+            if (k > 5)
+                let zs = fm2(x, [k, k + 1, k + 2])
+                zs ++ fm1(xs)
+            else
+                fm1(xs)
+
+    function
+        fm2(x, []) = []
+        fm2(x, y :: ys) = x + y :: fm2(x, ys)
+
+    public entrypoint build_foldr() =
+        fr1([1..4])
+    function
+        fr1([]) = []
+        fr1(x :: xs) =
+            let zs = fr1(xs)
+            let k = x * x
+            if (k > 5)
+                fr2(x, [k, k+1, k+2], zs)
+            else
+                zs
+    function
+        fr2(x, [], zs) = zs
+        fr2(x, y :: ys, zs) = x + y :: fr2(x, ys, zs)
+    
+    public entrypoint build_foldl() =
+        reverse(fl1([1..4], []), [])
+    function
+        fl1([], zs) = zs
+        fl1(x :: xs, zs) =
+            let k = x * x
+            let zs2 = if (k > 5) fl2(x, [k, k+1, k+2], zs) else []
+            fl1(xs, zs2)
+    function
+        fl2(x, [], zs) = zs
+        fl2(x, y :: ys, zs) = fl2(x, ys, x + y :: zs)
+    
+    function
+        reverse([], ys) = ys
+        reverse(x :: xs, ys) = reverse(xs, x :: ys)

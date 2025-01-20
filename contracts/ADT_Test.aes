@@ -18,4 +18,5 @@ contract ADT_Test =
       OneInt(y) => y
       TwoInts(y, z) => y + z
       ManyInts(xs) => xs[0]
+    let OneInt(z) = x
     y + 1
