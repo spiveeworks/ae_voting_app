@@ -1,0 +1,28 @@
+{name,"ae_voting_app"}.
+{type,app}.
+{modules,[]}.
+{prefix,"aev"}.
+{desc,"Voting app using the Aeternity blockchain."}.
+{author,"Jarvis Carroll"}.
+{package_id,{"otpr","ae_voting_app",{0,1,0}}}.
+{deps,[{"otpr","erl_base58",{0,1,0}},
+       {"otpr","ec_utils",{1,0,0}},
+       {"otpr","aebytecode",{3,2,1}},
+       {"otpr","aesophia",{7,1,2}},
+       {"otpr","aeserialization",{0,1,0}},
+       {"otpr","zj",{1,1,0}},
+       {"otpr","eblake2",{1,0,0}},
+       {"otpr","getopt",{1,0,2}},
+       {"otpr","vanillae",{0,4,1}},
+       {"otpr","cowboy",{2,10,1}},
+       {"otpr","ranch",{2,1,0}},
+       {"otpr","cowlib",{2,12,1}}]}.
+{key_name,none}.
+{a_email,"spiveehere@gmail.com"}.
+{c_email,"spiveehere@gmail.com"}.
+{copyright,"Jarvis Carroll"}.
+{file_exts,[]}.
+{license,"ISC"}.
+{repo_url,[]}.
+{tags,[]}.
+{ws_url,[]}.
