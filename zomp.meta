@@ -2,10 +2,11 @@
 {type,app}.
 {modules,[]}.
 {prefix,"aev"}.
-{desc,"Voting app using the Aeternity blockchain."}.
 {author,"Jarvis Carroll"}.
+{desc,"Voting app using the Aeternity blockchain."}.
 {package_id,{"otpr","ae_voting_app",{0,1,0}}}.
-{deps,[{"otpr","erl_base58",{0,1,0}},
+{deps,[{"otpr","hakuzaru",{0,2,0}},
+       {"otpr","erl_base58",{0,1,0}},
        {"otpr","ec_utils",{1,0,0}},
        {"otpr","aebytecode",{3,2,1}},
        {"otpr","aesophia",{8,0,1}},
@@ -13,7 +14,6 @@
        {"otpr","zj",{1,1,0}},
        {"otpr","eblake2",{1,0,0}},
        {"otpr","getopt",{1,0,2}},
-       {"otpr","vanillae",{0,4,1}},
        {"otpr","cowboy",{2,10,1}},
        {"otpr","ranch",{2,1,0}},
        {"otpr","cowlib",{2,12,1}}]}.

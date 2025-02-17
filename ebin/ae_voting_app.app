@@ -125,6 +125,6 @@
                         filters,ground_truth,permissions,poll_keeper,
                         poll_state,query_man,tests]},
               {registered,[ae_voting_app_sup]},
-              {applications,[kernel,stdlib,cowboy,inets,vanillae]},
+              {applications,[kernel,stdlib,cowboy,inets,hakuzaru]},
               {mod,{ae_voting_app,[]}},
               {env,[]}]}.

@@ -8,10 +8,13 @@ start() ->
     application:ensure_all_started(?MODULE).
 
 start(_Type, _Args) ->
+    application:ensure_started(hz),
+    application:ensure_started(cowboy),
+
     {Network, TLS, Nodes} = network(),
-    vanillae:network_id(Network),
-    vanillae:tls(TLS),
-    vanillae:ae_nodes(Nodes),
+    hz:network_id(Network),
+    hz:tls(TLS),
+    hz:chain_nodes(Nodes),
 
     {ok, SupRoot} = ae_voting_app_sup:start_link(),
 

@@ -42,13 +42,13 @@ vote_tx(ID, PollID, Option) ->
 
 % TODO: move to poll_state.erl? 
 query_account_balance(ID) ->
-    case vanillae:acc(ID) of
+    case hz:acc(ID) of
         {ok, #{"balance" := Balance}} -> {ok, Balance};
         {error, Reason} -> {error, Reason}
     end.
 
 query_account_balance(ID, PollHeight) ->
-    case vanillae:acc_at_height(ID, PollHeight) of
+    case hz:acc_at_height(ID, PollHeight) of
         {ok, #{"balance" := Balance}} -> {ok, Balance};
         {error, Reason} -> {error, Reason}
     end.
@@ -60,10 +60,10 @@ query_account_balance(ID, PollHeight) ->
 
 -record(cms, {registry_info :: #{integer() => #ci{}},
               poll_info :: #ci{},
-              dry_run_id :: vanillae:pubkey()}).
+              dry_run_id :: hz:pubkey()}).
 
 load_contract_info(Path) ->
-    {ok, AACI} = vanillae:prepare_contract(Path),
+    {ok, AACI} = hz:prepare_contract(Path),
     #ci{path = Path, aaci = AACI}.
 
 init({}) ->
@@ -110,7 +110,7 @@ handle_cast(_, State) ->
 do_create_registry(State, ID, Version, Prototype) ->
     case maps:find(Version, State#cms.registry_info) of
         {ok, #ci{path = Path}} ->
-            vanillae:contract_create(ID, Path, [Prototype]);
+            hz:contract_create(ID, Path, [Prototype]);
         error ->
             {error, unknown_version}
     end.
@@ -118,9 +118,9 @@ do_create_registry(State, ID, Version, Prototype) ->
 do_query_polls_tx(State, ID, #registry{chain_id = RegistryID, version = Version}) ->
     Info = maps:get(Version, State#cms.registry_info),
     AACI = Info#ci.aaci,
-    case vanillae:contract_call(ID, 1000000, AACI, RegistryID, "polls", []) of
+    case hz:contract_call(ID, 1000000, AACI, RegistryID, "polls", []) of
         {ok, TX} ->
-            {ok, {_, PollsType}} = vanillae:aaci_lookup_spec(AACI, "polls"),
+            {ok, {_, PollsType}} = hz:aaci_lookup_spec(AACI, "polls"),
             {ok, {PollsType, TX}};
         Error = {error, _} -> Error
     end.
@@ -148,7 +148,7 @@ do_create_poll(State, ID, RegistryID, Title, Description, Link, SpecRef, Options
                       never_closes ->
                           "None";
                       _ ->
-                          case vanillae:top_height() of
+                          case hz:top_height() of
                               {ok, TopHeight} -> {"Some", TopHeight + Age};
                               _ -> error
                           end
@@ -160,27 +160,27 @@ do_create_poll(State, ID, RegistryID, Title, Description, Link, SpecRef, Options
         error ->
             {error, top_height};
         _ ->
-            vanillae:contract_call(ID, AACI, RegistryID, "create_poll", PollArgs)
+            hz:contract_call(ID, AACI, RegistryID, "create_poll", PollArgs)
     end.
 
 do_register_poll(State, ID, #registry{chain_id = RegistryID, version = Version}, PollID, Listed) ->
     RegistryInfo = maps:get(Version, State#cms.registry_info),
     RegistryAACI = RegistryInfo#ci.aaci,
 
-    FormationResult = vanillae:contract_call(ID, RegistryAACI, RegistryID,
+    FormationResult = hz:contract_call(ID, RegistryAACI, RegistryID,
                                              "add_poll", [PollID, Listed]),
     case FormationResult of
         {ok, TX} ->
-            {ok, {_, T}} = vanillae:aaci_lookup_spec(RegistryAACI, "add_poll"),
+            {ok, {_, T}} = hz:aaci_lookup_spec(RegistryAACI, "add_poll"),
             {ok, {T, TX}};
         Error = {error, _} -> Error
     end.
 
 do_query_poll_state_tx(State, ID, PollID) ->
     AACI = State#cms.poll_info#ci.aaci,
-    case vanillae:contract_call(ID, 1000000, AACI, PollID, "get_state", []) of
+    case hz:contract_call(ID, 1000000, AACI, PollID, "get_state", []) of
         {ok, TX} ->
-            {ok, {_, Type}} = vanillae:aaci_lookup_spec(AACI, "get_state"),
+            {ok, {_, Type}} = hz:aaci_lookup_spec(AACI, "get_state"),
             {ok, {Type, TX}};
         Error = {error, _} -> Error
     end.
@@ -199,20 +199,20 @@ do_vote_tx(State, ID, PollID, revoke) ->
     AACI = State#cms.poll_info#ci.aaci,
     % FIXME what should this gas amount be? The vote call should have a pretty
     % consistent gas cost, right?
-    vanillae:contract_call(ID, AACI, PollID, "revoke_vote", []);
+    hz:contract_call(ID, AACI, PollID, "revoke_vote", []);
 do_vote_tx(State, ID, PollID, Option) ->
     AACI = State#cms.poll_info#ci.aaci,
     % FIXME what should this gas amount be? The vote call should have a pretty
     % consistent gas cost, right?
-    vanillae:contract_call(ID, AACI, PollID, "vote", [Option]).
+    hz:contract_call(ID, AACI, PollID, "vote", [Option]).
 
 option(none) -> "None";
 option(A) -> {"Some", A}.
 
 dry_run(Type, TX) ->
-    case vanillae:dry_run(TX) of
+    case hz:dry_run(TX) of
         {ok, #{"results" := [#{"call_obj" := #{"return_value" := EncodedStr}}]}} ->
-            vanillae:decode_bytearray(Type, EncodedStr);
+            hz:decode_bytearray(Type, EncodedStr);
         {ok, #{"results" := [#{"reason" := Message}]}} ->
             {error, Message};
         {error, Reason} ->
