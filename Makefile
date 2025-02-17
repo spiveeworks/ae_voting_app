@@ -51,7 +51,7 @@ deps/aeserialization:
 deps/eblake2:
 	$(git-clone) https://github.com/aeternity/eblake2 deps/eblake2 --branch v1.0.0
 deps/aesophia:
-	$(git-clone) https://github.com/aeternity/aesophia.git deps/aesophia --branch v7.1.0
+	$(git-clone) https://github.com/aeternity/aesophia.git deps/aesophia --branch v8.0.1
 deps/zx:
 	$(git-clone) https://gitlab.com/zxq9/zx/ deps/zx
 # Using spiveeworks fork of Vanillae, which is made specifically to add the
@@ -78,9 +78,6 @@ ebin/aeb_fate_asm.beam aeb_fate_code.beam: deps/aebytecode/include/aeb_fate_opco
 $(AEB_GENERATED_SRC): ebin/aeb_fate_generate_ops.beam deps/aebytecode/src/aeb_fate_asm_scan.template
 	@echo Generating code.
 	@cd deps/aebytecode && erl -pa ../../ebin/ -noshell -s aeb_fate_generate_ops gen_and_halt src/ include/
-
-priv:
-	mkdir priv
 
 # Applications. 'behaviours' is all of the files that need to be compiled
 # first, to suppress "behaviour undefined" warnings when compiling ranch,
@@ -131,7 +128,6 @@ run: all
 clean:
 	rm -rf ebin/*.beam
 	rm -f $(AEB_GENERATED_SRC)
-	rm -r priv
 distclean:
 	rm -rf ebin/*.beam
 	rm -rf deps

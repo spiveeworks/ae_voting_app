@@ -9,7 +9,7 @@
 -include("poll_state.hrl").
 
 make_keypair() ->
-    #{ public := Pub, secret := Priv } = enacl:sign_keypair(),
+    #{ public := Pub, secret := Priv } = ecu_eddsa:sign_keypair(),
     PubBin = aeser_api_encoder:encode(account_pubkey, Pub),
     PubStr = unicode:characters_to_list(PubBin),
     #keypair{public = PubStr, private = Priv}.
