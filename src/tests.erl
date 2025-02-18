@@ -8,6 +8,9 @@
 
 -include("poll_state.hrl").
 
+%%%%%%%%%%%%%%%%%%%%%%%%
+% Keypair Manipulation
+
 make_keypair() ->
     #{ public := Pub, secret := Priv } = ecu_eddsa:sign_keypair(),
     PubBin = aeser_api_encoder:encode(account_pubkey, Pub),
@@ -54,14 +57,164 @@ get_pubkey() ->
     K#keypair.public.
 
 
-create_poll_registry(Version) ->
+%%%%%%%%%%%%%%%%%%
+% contract_man functionality
+
+% This is just contract_man turned into a library instead of a gen_server.
+% cms = 'Contract Manager State', i.e. the compiled contracts, and a key that
+% can be used for dry runs.
+
+-record(ci, {path, aaci}).
+
+-record(cms, {registry_info :: #{integer() => #ci{}},
+              poll_info :: #ci{},
+              dry_run_id :: hz:pubkey()}).
+
+load_contract_info(Path) ->
+    {ok, AACI} = hz:prepare_contract(Path),
+    #ci{path = Path, aaci = AACI}.
+
+compile_cms() ->
+    PollInfo = load_contract_info("contracts/Poll_v2.aes"),
+    Registries = #{2 => load_contract_info("contracts/Registry_v2.aes"),
+                   3 => load_contract_info("contracts/Registry_v3.aes")},
+
+    % TODO: Put this keypair stuff in a devoted key handling module? Stop
+    %       storing a private key in the backend?
+    ID = tests:get_pubkey(),
+
+    CMS = #cms{registry_info = Registries,
+                 poll_info = PollInfo,
+                 dry_run_id = ID},
+
+    {ok, CMS}.
+
+create_registry_tx(CMS, ID, Version, Prototype) ->
+    case maps:find(Version, CMS#cms.registry_info) of
+        {ok, #ci{path = Path}} ->
+            hz:contract_create(ID, Path, [Prototype]);
+        error ->
+            {error, unknown_version}
+    end.
+
+query_polls_tx(CMS, ID, #registry{chain_id = RegistryID, version = Version}) ->
+    Info = maps:get(Version, CMS#cms.registry_info),
+    AACI = Info#ci.aaci,
+    case hz:contract_call(ID, 1000000, AACI, RegistryID, "polls", []) of
+        {ok, TX} ->
+            {ok, {_, PollsType}} = hz:aaci_lookup_spec(AACI, "polls"),
+            {ok, {PollsType, TX}};
+        Error = {error, _} -> Error
+    end.
+
+query_polls(CMS, Registry) ->
+    ID = CMS#cms.dry_run_id,
+
+    case query_polls_tx(CMS, ID, Registry) of
+        {ok, {PollsType, TX}} ->
+            dry_run(PollsType, TX);
+        Error ->
+            Error
+    end.
+
+create_poll_tx(CMS, ID, RegistryID, Title, Description, Link, SpecRef, Options, Age) ->
+    RegistryInfo = maps:get(3, CMS#cms.registry_info),
+    AACI = RegistryInfo#ci.aaci,
+
+    PollMetadata = #{"title" => Title,
+                     "description" => Description,
+                     "link" => Link,
+                     "spec_ref" => option(SpecRef)},
+
+    CloseHeight = case Age of
+                      never_closes ->
+                          "None";
+                      _ ->
+                          case hz:top_height() of
+                              {ok, TopHeight} -> {"Some", TopHeight + Age};
+                              _ -> error
+                          end
+                  end,
+
+    PollArgs = [PollMetadata, Options, CloseHeight],
+
+    case CloseHeight of
+        error ->
+            {error, top_height};
+        _ ->
+            hz:contract_call(ID, AACI, RegistryID, "create_poll", PollArgs)
+    end.
+
+option(none) -> "None";
+option(A) -> {"Some", A}.
+
+register_poll_tx(CMS, ID, #registry{chain_id = RegistryID, version = Version}, PollID, Listed) ->
+    RegistryInfo = maps:get(Version, CMS#cms.registry_info),
+    RegistryAACI = RegistryInfo#ci.aaci,
+
+    FormationResult = hz:contract_call(ID, RegistryAACI, RegistryID,
+                                             "add_poll", [PollID, Listed]),
+    case FormationResult of
+        {ok, TX} ->
+            {ok, {_, T}} = hz:aaci_lookup_spec(RegistryAACI, "add_poll"),
+            {ok, {T, TX}};
+        Error = {error, _} -> Error
+    end.
+
+query_poll_state_tx(CMS, ID, PollID) ->
+    AACI = CMS#cms.poll_info#ci.aaci,
+    case hz:contract_call(ID, 1000000, AACI, PollID, "get_state", []) of
+        {ok, TX} ->
+            {ok, {_, Type}} = hz:aaci_lookup_spec(AACI, "get_state"),
+            {ok, {Type, TX}};
+        Error = {error, _} -> Error
+    end.
+
+query_poll_state(CMS, PollID) ->
+    ID = CMS#cms.dry_run_id,
+
+    case query_poll_state_tx(CMS, ID, PollID) of
+        {ok, {StateType, TX}} ->
+            dry_run(StateType, TX);
+        Error ->
+            Error
+    end.
+
+vote_tx(CMS, ID, PollID, revoke) ->
+    AACI = CMS#cms.poll_info#ci.aaci,
+    % FIXME what should this gas amount be? The vote call should have a pretty
+    % consistent gas cost, right?
+    hz:contract_call(ID, AACI, PollID, "revoke_vote", []);
+vote_tx(CMS, ID, PollID, Option) ->
+    AACI = CMS#cms.poll_info#ci.aaci,
+    % FIXME what should this gas amount be? The vote call should have a pretty
+    % consistent gas cost, right?
+    hz:contract_call(ID, AACI, PollID, "vote", [Option]).
+
+dry_run(Type, TX) ->
+    case hz:dry_run(TX) of
+        {ok, #{"results" := [#{"call_obj" := #{"return_value" := EncodedStr}}]}} ->
+            hz:decode_bytearray(Type, EncodedStr);
+        {ok, #{"results" := [#{"reason" := Message}]}} ->
+            {error, Message};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Contract Manipulations
+
+% These functions combine the contract_man operations above with query_man
+% operations to create and manipulate contracts.
+
+create_poll_registry(CMS, Version) ->
     Key = get_key(),
     CreatorID = Key#keypair.public,
 
     {ok, [Reg | _]} = poll_state:load_registries("registry_id"),
     {ok, #{0 := Prototype}} = poll_state:load_poll_list([Reg]),
 
-    {ok, CreateTX} = contract_man:create_registry(CreatorID, Version, Prototype),
+    {ok, CreateTX} = create_registry_tx(CMS, CreatorID, Version, Prototype),
 
     SignedTX = sign_transaction_base58(Key#keypair.private, CreateTX),
 
@@ -74,17 +227,13 @@ create_poll_registry(Version) ->
 
     Contract.
 
-
-registry_id() ->
-    "ct_4ddJuw5ekkgg6SvkX6F3k3Vs42a6CCfHgAEbidhCiYyM5k7sw".
-
-create_poll_contract(Registry) ->
+create_poll_contract(CMS, Registry) ->
     Key = get_key(),
     ID = Key#keypair.public,
 
     Description = "Dummy poll for testing the poll contract",
     Options = #{1 => "option 1", 2 => "option 2"},
-    {ok, CreateTX} = contract_man:create_poll(ID, Registry, "Test Poll", Description,
+    {ok, CreateTX} = create_poll_tx(CMS, ID, Registry, "Test Poll", Description,
                                               "example.com", none, Options,
                                               never_closes),
 
@@ -93,24 +242,6 @@ create_poll_contract(Registry) ->
     {ok, Result} = vanillae:post_tx(SignedTX),
     #{"tx_hash" := Hash} = Result,
     {ok, Hash}.
-
-adt_test() ->
-    Key = get_key(),
-    ID = Key#keypair.public,
-
-    Args = [#{"x" => ["NoInts",
-                      {"OneInt", 100},
-                      {"TwoInts", 20, true},
-                      {"NoInts"}, "OtherNumberOfInts",
-                      {"ManyInts", #{0 => 0,
-                                     1 => "thirty",
-                                     "two" => 2,
-                                     "three" => "fifty"}},
-                      false],
-              "y" => {5, true}}],
-    {ok, _CreateTX} = vanillae:contract_create(ID, "contracts/ADT_Test.aes", Args),
-
-    ok.
 
 vote_poll(PollIndex, Option) ->
     Key = get_key(),
@@ -131,8 +262,8 @@ vote_poll_wait(PollIndex, Option) ->
 
     ok.
 
-add_poll_registry(Version) ->
-    Contract = create_poll_registry(Version),
+add_poll_registry(CMS, Version) ->
+    Contract = create_poll_registry(CMS, Version),
 
     {ok, OldRegistries} = poll_state:load_registries("registry_id"),
 
@@ -143,9 +274,9 @@ add_poll_registry(Version) ->
 
     Contract.
 
-create_poll_and_registry() ->
-    Registry = add_poll_registry(3),
-    {ok, TH} = create_poll_contract(Registry),
+create_poll_and_registry(CMS) ->
+    Registry = add_poll_registry(CMS, 3),
+    {ok, TH} = create_poll_contract(CMS, Registry),
 
     query_man:subscribe_tx_info(self(), "create poll", TH),
     receive
@@ -157,14 +288,14 @@ create_poll_and_registry() ->
 
 
 run_tests() ->
-    %adt_test(),
+    CMS = compile_cms(),
 
     %Registry = create_registry_and_poll_parallel(7),
     %create_and_add_poll(Registry),
 
     %{ok, [_Reg6, Reg7]} = poll_state:load_registries("registry_id"),
 
-    %RegistryID = create_poll_registry(7),
+    %RegistryID = create_poll_registry(CMS, 7),
 
     %create_and_add_poll(Reg7),
 
